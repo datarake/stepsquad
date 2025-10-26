@@ -1,18 +1,21 @@
 services:
   api:
     build: ./apps/api
-    ports: ["8004:8004"]
+    ports:
+      - "8004:8080"
     environment:
       COMP_TZ: Europe/Bucharest
       GRACE_DAYS: "2"
       GCP_ENABLED: "false"
-      PORT: "8004"
+      PORT: "8080"
   web:
     build: ./apps/web
-    ports: ["5173:5173"]
+    ports:
+      - "5173:5173"
     environment:
       VITE_API_BASE_URL: "http://localhost:8004"
-    depends_on: [api]
+    depends_on:
+      - api
   workers:
     build: ./apps/workers
     environment:
@@ -20,4 +23,6 @@ services:
       GOOGLE_CLOUD_PROJECT: StepSquad
       BQ_DATASET: stepsquad
       PUBSUB_SUB_INGEST: steps.ingest.sub
-    depends_on: [api]
+      PORT: "8080"  # optional, for consistency
+    depends_on:
+      - api
