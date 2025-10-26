@@ -1,0 +1,6 @@
+CREATE SCHEMA IF NOT EXISTS `${DATASET}`;
+CREATE TABLE IF NOT EXISTS `${DATASET}.fact_daily_steps` (
+  user_id STRING,
+  date DATE,
+  steps INT64
+) PARTITION BY date;

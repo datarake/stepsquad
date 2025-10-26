@@ -1,0 +1,11 @@
+[project]
+name = "stepsquad-agents"
+version = "0.2.0"
+requires-python = ">=3.11"
+dependencies = [
+  "fastapi>=0.115.0",
+  "uvicorn[standard]>=0.30.0",
+  "google-cloud-bigquery>=3.25.0",
+  "google-cloud-firestore>=2.16.0",
+  "requests>=2.32.3"
+]

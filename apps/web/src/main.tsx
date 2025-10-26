@@ -1,0 +1,6 @@
+import React from "react"; import { createRoot } from "react-dom/client";
+const API = import.meta.env.VITE_API_BASE_URL || "http://localhost:8004";
+function useFetch<T>(url:string,deps:any[]=[]){const[d,sD]=React.useState<T|null>(null);React.useEffect(()=>{let ok=true;fetch(url).then(r=>r.json()).then(j=>ok&&sD(j));return()=>{ok=false}},deps);return d;}
+function App(){const[date,setDate]=React.useState("");const indiv=useFetch<{rows:{user_id:string,steps:number}[]}>(`${API}/leaderboard/individual${date?`?date=${date}`:""}`,[date]);const teams=useFetch<{rows:{team_id:string,name:string,steps:number}[]}>(`${API}/leaderboard/team${date?`?date=${date}`:""}`,[date]);async function seed(){await fetch(`${API}/dev/seed`,{method:"POST"});location.reload();}
+  return (<div style={{fontFamily:"Inter, system-ui, Arial",padding:24}}><h1>StepSquad</h1><div style={{display:"flex",gap:12,alignItems:"center"}}><button onClick={seed}>Import sample data</button><input placeholder="YYYY-MM-DD" value={date} onChange={e=>setDate(e.target.value)} /></div><h3 style={{marginTop:16}}>Individuals</h3><ol>{indiv?.rows?.map((r,i)=>(<li key={r.user_id}><b>#{i+1}</b> {r.user_id} — {r.steps}</li>))}</ol><h3>Teams</h3><ol>{teams?.rows?.map((r,i)=>(<li key={r.team_id}><b>#{i+1}</b> {r.name} — {r.steps}</li>))}</ol></div>);}
+createRoot(document.getElementById("root")!).render(<App />);
