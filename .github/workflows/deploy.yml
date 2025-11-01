@@ -6,7 +6,6 @@ on:
   workflow_dispatch:
 
 env:
-  PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
   REGION: us-central1
 
 jobs:
@@ -23,12 +22,16 @@ jobs:
           project_id: ${{ secrets.GCP_PROJECT_ID }}
       
       - name: Set project
+        env:
+          GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
         run: |
-          if [ -z "${{ secrets.GCP_PROJECT_ID }}" ]; then
-            echo "Error: GCP_PROJECT_ID secret is not set"
+          if [ -z "$GCP_PROJECT_ID" ]; then
+            echo "Error: GCP_PROJECT_ID secret is not set or empty"
+            echo "Please verify the secret exists in GitHub Settings → Secrets → Actions"
             exit 1
           fi
-          gcloud config set project "${{ secrets.GCP_PROJECT_ID }}"
+          echo "Project ID: $GCP_PROJECT_ID"
+          gcloud config set project "$GCP_PROJECT_ID"
           gcloud config list
       
       - name: Build API Image
@@ -70,12 +73,16 @@ jobs:
           project_id: ${{ secrets.GCP_PROJECT_ID }}
       
       - name: Set project
+        env:
+          GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
         run: |
-          if [ -z "${{ secrets.GCP_PROJECT_ID }}" ]; then
-            echo "Error: GCP_PROJECT_ID secret is not set"
+          if [ -z "$GCP_PROJECT_ID" ]; then
+            echo "Error: GCP_PROJECT_ID secret is not set or empty"
+            echo "Please verify the secret exists in GitHub Settings → Secrets → Actions"
             exit 1
           fi
-          gcloud config set project "${{ secrets.GCP_PROJECT_ID }}"
+          echo "Project ID: $GCP_PROJECT_ID"
+          gcloud config set project "$GCP_PROJECT_ID"
           gcloud config list
       
       - name: Get API URL
@@ -127,12 +134,16 @@ jobs:
           project_id: ${{ secrets.GCP_PROJECT_ID }}
       
       - name: Set project
+        env:
+          GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
         run: |
-          if [ -z "${{ secrets.GCP_PROJECT_ID }}" ]; then
-            echo "Error: GCP_PROJECT_ID secret is not set"
+          if [ -z "$GCP_PROJECT_ID" ]; then
+            echo "Error: GCP_PROJECT_ID secret is not set or empty"
+            echo "Please verify the secret exists in GitHub Settings → Secrets → Actions"
             exit 1
           fi
-          gcloud config set project "${{ secrets.GCP_PROJECT_ID }}"
+          echo "Project ID: $GCP_PROJECT_ID"
+          gcloud config set project "$GCP_PROJECT_ID"
           gcloud config list
       
       - name: Get URLs
