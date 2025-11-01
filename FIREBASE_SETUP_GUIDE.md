@@ -56,16 +56,17 @@ If your GCP project already has Firebase enabled:
 5. (Optional) Check **"Also set up Firebase Hosting"**
 6. Click **"Register app"**
 7. **Copy the Firebase configuration object** - you'll need these values:
-   ```javascript
-   {
-     apiKey: "AIza...",
-     authDomain: "your-project.firebaseapp.com",
-     projectId: "your-project-id",
-     storageBucket: "your-project.appspot.com",
-     messagingSenderId: "123456789",
-     appId: "1:123456789:web:abcdef"
-   }
-   ```
+  ```javascript
+  {
+    apiKey: "AIzaSyBAPgF7xzHOqKgGG8HkWgArtM4Luc_au1M",
+    authDomain: "stepsquad-46d14.firebaseapp.com",
+    projectId: "stepsquad-46d14",
+    storageBucket: "stepsquad-46d14.firebasestorage.app",
+    messagingSenderId: "451432804996",
+    appId: "1:451432804996:web:72718bbe41e597a69008d1",
+    measurementId: "G-RDWR6NK1EN"
+  }
+  ```
 
 ---
 
@@ -73,27 +74,43 @@ If your GCP project already has Firebase enabled:
 
 The backend needs Firebase Admin SDK access. You can use the same service account as Cloud Run.
 
+**📖 For detailed step-by-step instructions with troubleshooting, see [SERVICE_ACCOUNT_SETUP.md](SERVICE_ACCOUNT_SETUP.md)**
+
 ### For Cloud Run (Automatic - Recommended)
 
-1. Cloud Run automatically uses the service account attached to the service
+1. Find your Cloud Run service account (see detailed guide for how to find it)
 2. Ensure the service account has **Firebase Admin** role:
    ```bash
-   gcloud projects add-iam-policy-binding YOUR_PROJECT_ID \
-     --member="serviceAccount:YOUR_SERVICE_ACCOUNT@YOUR_PROJECT.iam.gserviceaccount.com" \
+   gcloud projects add-iam-policy-binding stepsquad-46d14 \
+     --member="serviceAccount:YOUR_SERVICE_ACCOUNT@stepsquad-46d14.iam.gserviceaccount.com" \
      --role="roles/firebase.admin"
    ```
+3. Verify the role was granted
+
+**See [SERVICE_ACCOUNT_SETUP.md](SERVICE_ACCOUNT_SETUP.md) for:**
+- How to find your Cloud Run service account email
+- How to verify the role was granted
+- Troubleshooting common issues
 
 ### For Local Testing (Optional)
 
 1. Go to [Firebase Console](https://console.firebase.google.com/)
-2. Go to **Project Settings** → **Service accounts**
-3. Click **"Generate new private key"**
-4. Save the JSON file securely (e.g., `firebase-service-account.json`)
-5. **DO NOT commit this file to git!**
-6. Set environment variable:
+2. Select project: **stepsquad-46d14**
+3. Go to **Project Settings** → **Service accounts** tab
+4. Click **"Generate new private key"** (choose Python)
+5. Save the JSON file securely
+6. **DO NOT commit this file to git!**
+7. Update `apps/api/.env`:
    ```bash
-   export GOOGLE_APPLICATION_CREDENTIALS=/path/to/firebase-service-account.json
+   GOOGLE_APPLICATION_CREDENTIALS=/path/to/firebase-service-account.json
    ```
+8. Add to `.gitignore`
+
+**See [SERVICE_ACCOUNT_SETUP.md](SERVICE_ACCOUNT_SETUP.md) for:**
+- Recommended file locations
+- Security best practices
+- Verification steps
+- Complete troubleshooting guide
 
 ---
 
@@ -241,12 +258,13 @@ This will check:
    VITE_API_BASE_URL=https://your-api-url.run.app
    VITE_USE_DEV_AUTH=false
    VITE_ADMIN_EMAIL=admin@stepsquad.com
-   VITE_FIREBASE_API_KEY=AIza...
-   VITE_FIREBASE_AUTH_DOMAIN=your-project.firebaseapp.com
-   VITE_FIREBASE_PROJECT_ID=your-project-id
-   VITE_FIREBASE_STORAGE_BUCKET=your-project.appspot.com
-   VITE_FIREBASE_MESSAGING_SENDER_ID=123456789
-   VITE_FIREBASE_APP_ID=1:123456789:web:abcdef
+   VITE_FIREBASE_API_KEY=AIzaSyBAPgF7xzHOqKgGG8HkWgArtM4Luc_au1M
+   VITE_FIREBASE_AUTH_DOMAIN=stepsquad-46d14.firebaseapp.com
+   VITE_FIREBASE_PROJECT_ID=stepsquad-46d14
+   VITE_FIREBASE_STORAGE_BUCKET=stepsquad-46d14.firebasestorage.app
+   VITE_FIREBASE_MESSAGING_SENDER_ID=451432804996
+   VITE_FIREBASE_APP_ID=1:451432804996:web:72718bbe41e597a69008d1
+   VITE_FIREBASE_MEASUREMENT_ID=G-RDWR6NK1EN
    EOF
    
    # Build

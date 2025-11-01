@@ -103,4 +103,5 @@ docker-compose.override.yml
 
 # Backup files
 *.orig
-*~
+*~firebase-service-account.json
+**/firebase-service-account.json

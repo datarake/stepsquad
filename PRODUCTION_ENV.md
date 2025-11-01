@@ -33,13 +33,14 @@ VITE_API_BASE_URL=https://your-api-url.run.app
 VITE_USE_DEV_AUTH=false
 VITE_ADMIN_EMAIL=admin@stepsquad.com
 
-# Firebase Configuration
-VITE_FIREBASE_API_KEY=your-api-key
-VITE_FIREBASE_AUTH_DOMAIN=your-project.firebaseapp.com
-VITE_FIREBASE_PROJECT_ID=your-project-id
-VITE_FIREBASE_STORAGE_BUCKET=your-project.appspot.com
-VITE_FIREBASE_MESSAGING_SENDER_ID=123456789
-VITE_FIREBASE_APP_ID=1:123456789:web:abcdef
+# Firebase Configuration (StepSquad Project)
+VITE_FIREBASE_API_KEY=AIzaSyBAPgF7xzHOqKgGG8HkWgArtM4Luc_au1M
+VITE_FIREBASE_AUTH_DOMAIN=stepsquad-46d14.firebaseapp.com
+VITE_FIREBASE_PROJECT_ID=stepsquad-46d14
+VITE_FIREBASE_STORAGE_BUCKET=stepsquad-46d14.firebasestorage.app
+VITE_FIREBASE_MESSAGING_SENDER_ID=451432804996
+VITE_FIREBASE_APP_ID=1:451432804996:web:72718bbe41e597a69008d1
+VITE_FIREBASE_MEASUREMENT_ID=G-RDWR6NK1EN
 ```
 
 **Important**: Frontend environment variables must be set at **build time** because Vite embeds them in the bundle.

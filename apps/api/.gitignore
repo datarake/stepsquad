@@ -102,3 +102,5 @@ service-account*.json
 *credentials*.json
 *key*.json
 !pyproject.toml
+firebase-service-account.json
+*.json
