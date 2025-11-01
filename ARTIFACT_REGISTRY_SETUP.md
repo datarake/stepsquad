@@ -7,7 +7,18 @@ If you see the error:
 ERROR: Repository "stepsquad" not found
 ```
 
-This means the Artifact Registry repository doesn't exist. The CI/CD workflow will automatically create it, but if you need to create it manually:
+This means the Artifact Registry repository doesn't exist in the `us-central1` region.
+
+**Note**: The CI/CD service account may not have permissions to create repositories automatically. If the automated creation fails, you need to create it manually.
+
+## Prerequisites
+
+1. **Enable Artifact Registry API** (requires `Service Usage Admin` or project owner permissions):
+   ```bash
+   gcloud services enable artifactregistry.googleapis.com --project=YOUR_PROJECT_ID
+   ```
+
+2. **Create the repository** (requires `Artifact Registry Admin` or project owner permissions):
 
 ### Option 1: Create via gcloud CLI
 
