@@ -3,7 +3,7 @@ set -euo pipefail
 set -x
 
 PROJECT=${GOOGLE_CLOUD_PROJECT:?Set GOOGLE_CLOUD_PROJECT}
-REGION=${GCP_REGION:-europe-west1}
+REGION=${GCP_REGION:-us-central1}
 REPO=${AR_REPO:-stepsquad}
 IMAGE="agents"
 SERVICE="stepsquad-agents"

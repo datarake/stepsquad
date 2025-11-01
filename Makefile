@@ -30,7 +30,7 @@ deploy_web:
 deploy_agents:
 	cd deploy && ./deploy_agents.sh
 
-GCP_REGION ?= europe-west1
+GCP_REGION ?= us-central1
 PROJECT ?= fluent-coder-476318-n0
 
 check_health:

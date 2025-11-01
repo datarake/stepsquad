@@ -7,6 +7,7 @@ on:
 
 env:
   REGION: us-central1
+  AR_REPO: stepsquad
 
 jobs:
   deploy-api:
@@ -59,18 +60,18 @@ jobs:
             exit 1
           fi
           cd apps/api
-          gcloud builds submit --tag gcr.io/$PROJECT_ID/stepsquad-api:${{ github.sha }}
+          gcloud builds submit --tag ${{ env.REGION }}-docker.pkg.dev/$PROJECT_ID/${{ env.AR_REPO }}/api:${{ github.sha }}
       
       - name: Deploy to Cloud Run
         env:
           PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
         run: |
           gcloud run deploy stepsquad-api \
-            --image gcr.io/$PROJECT_ID/stepsquad-api:${{ github.sha }} \
+            --image ${{ env.REGION }}-docker.pkg.dev/$PROJECT_ID/${{ env.AR_REPO }}/api:${{ github.sha }} \
             --platform managed \
             --region ${{ env.REGION }} \
             --allow-unauthenticated \
-            --set-env-vars="GCP_ENABLED=true,COMP_TZ=Europe/Bucharest" \
+            --set-env-vars="GCP_ENABLED=true,GOOGLE_CLOUD_PROJECT=$PROJECT_ID,COMP_TZ=Europe/Bucharest,BQ_DATASET=stepsquad,PUBSUB_TOPIC_INGEST=steps.ingest,GRACE_DAYS=2" \
             --port 8080 \
             --memory 512Mi \
             --cpu 1
@@ -139,14 +140,14 @@ jobs:
           # Create .env.production with build-time variables
           echo "VITE_API_BASE_URL=${{ steps.get-api-url.outputs.api_url }}" > .env.production
           echo "VITE_USE_DEV_AUTH=false" >> .env.production
-          gcloud builds submit --tag gcr.io/$PROJECT_ID/stepsquad-web:${{ github.sha }}
+          gcloud builds submit --tag ${{ env.REGION }}-docker.pkg.dev/$PROJECT_ID/${{ env.AR_REPO }}/web:${{ github.sha }}
       
       - name: Deploy to Cloud Run
         env:
           PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
         run: |
           gcloud run deploy stepsquad-web \
-            --image gcr.io/$PROJECT_ID/stepsquad-web:${{ github.sha }} \
+            --image ${{ env.REGION }}-docker.pkg.dev/$PROJECT_ID/${{ env.AR_REPO }}/web:${{ github.sha }} \
             --platform managed \
             --region ${{ env.REGION }} \
             --allow-unauthenticated \
@@ -154,10 +155,108 @@ jobs:
             --memory 256Mi \
             --cpu 1
 
+  deploy-workers:
+    name: Deploy Workers
+    runs-on: ubuntu-latest
+    needs: deploy-api
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v3
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+      
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ secrets.GCP_PROJECT_ID }}
+      
+      - name: Set project
+        env:
+          GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+        run: |
+          if [ -z "$GCP_PROJECT_ID" ]; then
+            echo "Error: GCP_PROJECT_ID secret is not set or empty"
+            exit 1
+          fi
+          gcloud config set project "$GCP_PROJECT_ID"
+      
+      - name: Build Workers Image
+        env:
+          PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+        run: |
+          cd apps/workers
+          gcloud builds submit --tag ${{ env.REGION }}-docker.pkg.dev/$PROJECT_ID/${{ env.AR_REPO }}/workers:${{ github.sha }}
+      
+      - name: Deploy to Cloud Run
+        env:
+          PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+        run: |
+          gcloud run deploy stepsquad-workers \
+            --image ${{ env.REGION }}-docker.pkg.dev/$PROJECT_ID/${{ env.AR_REPO }}/workers:${{ github.sha }} \
+            --platform managed \
+            --region ${{ env.REGION }} \
+            --no-allow-unauthenticated \
+            --set-env-vars="GCP_ENABLED=true,GOOGLE_CLOUD_PROJECT=$PROJECT_ID,BQ_DATASET=stepsquad,PUBSUB_SUB_INGEST=steps.ingest.sub" \
+            --port 8080 \
+            --memory 512Mi \
+            --cpu 1
+
+  deploy-agents:
+    name: Deploy Agents
+    runs-on: ubuntu-latest
+    needs: deploy-api
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v3
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+      
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ secrets.GCP_PROJECT_ID }}
+      
+      - name: Set project
+        env:
+          GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+        run: |
+          if [ -z "$GCP_PROJECT_ID" ]; then
+            echo "Error: GCP_PROJECT_ID secret is not set or empty"
+            exit 1
+          fi
+          gcloud config set project "$GCP_PROJECT_ID"
+      
+      - name: Build Agents Image
+        env:
+          PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+        run: |
+          cd apps/agents
+          gcloud builds submit --tag ${{ env.REGION }}-docker.pkg.dev/$PROJECT_ID/${{ env.AR_REPO }}/agents:${{ github.sha }}
+      
+      - name: Deploy to Cloud Run
+        env:
+          PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+        run: |
+          gcloud run deploy stepsquad-agents \
+            --image ${{ env.REGION }}-docker.pkg.dev/$PROJECT_ID/${{ env.AR_REPO }}/agents:${{ github.sha }} \
+            --platform managed \
+            --region ${{ env.REGION }} \
+            --no-allow-unauthenticated \
+            --set-env-vars="GCP_ENABLED=true,GOOGLE_CLOUD_PROJECT=$PROJECT_ID" \
+            --port 8080 \
+            --memory 512Mi \
+            --cpu 1
+
   test-deployment:
     name: Test Deployment
     runs-on: ubuntu-latest
-    needs: [deploy-api, deploy-web]
+    needs: [deploy-api, deploy-web, deploy-workers, deploy-agents]
     
     steps:
       - name: Authenticate to Google Cloud

@@ -167,13 +167,15 @@ make bq_schema
 
 ```bash
 export GOOGLE_CLOUD_PROJECT=fluent-coder-476318-n0
-export GCP_REGION=europe-west1
+export GCP_REGION=us-central1
 
 make deploy_api
 make deploy_workers
 make deploy_agents
 make deploy_web
 ```
+
+**Note**: Services are also automatically deployed via CI/CD on every push to `main`.
 
 Each deployment:
 - Builds the image with **Cloud Build**
@@ -189,7 +191,7 @@ make check_health
 Expected output:
 
 ```
-🔍 Checking StepSquad service health in region europe-west1...
+🔍 Checking StepSquad service health in region us-central1...
 ✅ stepsquad-api: healthy (...)
 ✅ stepsquad-workers: healthy (...)
 ✅ stepsquad-agents: healthy (...)

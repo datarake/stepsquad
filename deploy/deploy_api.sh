@@ -3,7 +3,7 @@ set -euo pipefail
 set -x
 
 PROJECT=${GOOGLE_CLOUD_PROJECT:?Set GOOGLE_CLOUD_PROJECT}
-REGION=${GCP_REGION:-europe-west1}
+REGION=${GCP_REGION:-us-central1}
 REPO=${AR_REPO:-stepsquad}
 IMAGE="api"
 SERVICE="stepsquad-api"
@@ -25,4 +25,4 @@ gcloud run deploy "${SERVICE}" \
 gcloud run deploy "${SERVICE}" \
   --image "${REGION}-docker.pkg.dev/${PROJECT}/${REPO}/${IMAGE}:latest" \
   --region "${REGION}" --platform managed --allow-unauthenticated \
-  --set-env-vars "GCP_ENABLED=true,GOOGLE_CLOUD_PROJECT=${PROJECT},BQ_DATASET=stepsquad,PUBSUB_TOPIC_INGEST=steps.ingest,COMP_TZ=Europe/Bucharest,GRACE_DAYS=2"
+  --set-env-vars "GCP_ENABLED=true,GOOGLE_CLOUD_PROJECT=${PROJECT},COMP_TZ=Europe/Bucharest,BQ_DATASET=stepsquad,PUBSUB_TOPIC_INGEST=steps.ingest,GRACE_DAYS=2"
