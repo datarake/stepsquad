@@ -14,8 +14,11 @@
 
 3. **Grant roles** (permissions):
    - Add these roles one by one:
-     - `Cloud Run Admin` - For deploying to Cloud Run
+     - `Service Usage Consumer` ⚠️ **Critical for Cloud Build!**
      - `Cloud Build Editor` - For building container images
+     - `Cloud Build Service Account` - For executing builds
+     - `Storage Admin` - For accessing Cloud Build storage buckets
+     - `Cloud Run Admin` - For deploying to Cloud Run
      - `Service Account User` - For using service accounts
      - `Artifact Registry Writer` - For pushing images to Artifact Registry (if using)
    - Click **"Continue"**
