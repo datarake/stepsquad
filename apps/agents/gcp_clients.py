@@ -3,8 +3,6 @@ GCP clients initialization for agents service
 """
 
 import os
-from google.cloud import firestore
-from google.cloud import bigquery
 
 GCP_ENABLED = os.getenv("GCP_ENABLED", "false").lower() == "true"
 firestore_client = None
@@ -19,12 +17,26 @@ def init_clients():
         return
     
     try:
+        from google.cloud import firestore
         firestore_client = firestore.Client()
-        bigquery_client = bigquery.Client()
+    except ImportError:
+        import logging
+        logging.warning("Firestore not available")
+        firestore_client = None
     except Exception as e:
         import logging
-        logging.warning(f"Failed to initialize GCP clients: {e}")
+        logging.warning(f"Failed to initialize Firestore: {e}")
         firestore_client = None
+    
+    try:
+        from google.cloud import bigquery
+        bigquery_client = bigquery.Client()
+    except ImportError:
+        # BigQuery is optional
+        bigquery_client = None
+    except Exception as e:
+        import logging
+        logging.warning(f"Failed to initialize BigQuery: {e}")
         bigquery_client = None
 
 

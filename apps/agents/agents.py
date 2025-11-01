@@ -83,18 +83,24 @@ class SyncAgent:
         self.name = "sync_agent"
         self.description = "Detects missing step data and triggers synchronization"
         
+        # Always create tools (using ADK if available, otherwise fallback Tool wrapper)
+        self.tools = [
+            self._create_check_missing_data_tool(),
+            self._create_check_late_data_tool(),
+            self._create_notify_fairness_agent_tool()
+        ]
+        
+        # Initialize ADK Agent if available (will implement actual ADK initialization when SDK is available)
         if ADK_AVAILABLE:
-            # Create ADK Agent with tools
-            self.tools = [
-                self._create_check_missing_data_tool(),
-                self._create_check_late_data_tool(),
-                self._create_notify_fairness_agent_tool()
-            ]
-            # Initialize ADK Agent (will implement actual ADK initialization when SDK is available)
-            self.agent = None  # Placeholder for actual ADK Agent instance
+            try:
+                # TODO: Initialize actual ADK Agent when SDK is available
+                # self.agent = Agent(name=self.name, tools=self.tools)
+                self.agent = None  # Placeholder for actual ADK Agent instance
+            except Exception as e:
+                logging.warning(f"Failed to initialize ADK Agent: {e}")
+                self.agent = None
         else:
             self.agent = None
-            self.tools = []
     
     def _create_check_missing_data_tool(self):
         """Tool to check for missing step data"""
@@ -339,18 +345,24 @@ class FairnessAgent:
         self.name = "fairness_agent"
         self.description = "Analyzes step data for anomalies and flags unrealistic entries"
         
+        # Always create tools (using ADK if available, otherwise fallback Tool wrapper)
+        self.tools = [
+            self._create_analyze_step_data_tool(),
+            self._create_flag_unfair_data_tool(),
+            self._create_check_patterns_tool()
+        ]
+        
+        # Initialize ADK Agent if available (will implement actual ADK initialization when SDK is available)
         if ADK_AVAILABLE:
-            # Create ADK Agent with tools
-            self.tools = [
-                self._create_analyze_step_data_tool(),
-                self._create_flag_unfair_data_tool(),
-                self._create_check_patterns_tool()
-            ]
-            # Initialize ADK Agent (will implement actual ADK initialization when SDK is available)
-            self.agent = None  # Placeholder for actual ADK Agent instance
+            try:
+                # TODO: Initialize actual ADK Agent when SDK is available
+                # self.agent = Agent(name=self.name, tools=self.tools)
+                self.agent = None  # Placeholder for actual ADK Agent instance
+            except Exception as e:
+                logging.warning(f"Failed to initialize ADK Agent: {e}")
+                self.agent = None
         else:
             self.agent = None
-            self.tools = []
     
     def _create_analyze_step_data_tool(self):
         """Tool to analyze step data for anomalies"""
