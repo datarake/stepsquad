@@ -276,19 +276,69 @@
 
 ---
 
+## ⚠️ What's NOT Implemented (Planned Features)
+
+### Mobile App & Smartwatch Integrations
+
+**Status**: ❌ **NOT IMPLEMENTED** - Planned for future
+
+#### Flutter Mobile App
+- ❌ **No `apps/mobile/` directory exists**
+- ❌ Flutter app not implemented
+- ⚠️ Mentioned in README architecture diagram as "(optional)"
+- ⚠️ Listed in roadmap as future enhancement
+
+#### Smartwatch Integrations
+- ❌ **No actual integrations implemented**
+- ✅ API accepts `provider` field with values: `"manual"`, `"garmin"`, `"fitbit"`, `"healthkit"`
+- ⚠️ But NO actual OAuth flows or API integrations exist
+- ⚠️ Currently only `"manual"` provider is functional
+- ⚠️ Smartwatch providers are just placeholder values in the data model
+
+**What Exists:**
+- ✅ API endpoint accepts `provider` parameter in `POST /ingest/steps`
+- ✅ Database stores provider name (garmin, fitbit, healthkit, manual)
+- ❌ NO OAuth implementation for Garmin/Fitbit
+- ❌ NO HealthKit integration for iOS
+- ❌ NO Health Connect integration for Android
+- ❌ NO mobile app to access device sensors
+
+**What's Planned:**
+- 📋 Flutter mobile app (mentioned in README)
+- 📋 Garmin API OAuth integration (8-12 hours)
+- 📋 Fitbit API OAuth integration (8-12 hours)
+- 📋 HealthKit sync for iOS (4-6 hours)
+- 📋 Health Connect sync for Android (4-6 hours)
+
+**Current State**: ✅ **Manual step entry only** - Users must manually enter step counts via web UI
+
+---
+
 ## 🚀 What's Next (Future Enhancements)
 
 ### Phase 1: Enhanced Features (Not Critical for Hackathon)
 
-#### Smartwatch Integrations (8-12 hours)
-- 🔄 Garmin API integration
-- 🔄 Fitbit API integration
+#### Mobile App Development (12-16 hours)
+- 🔄 Flutter mobile app setup
+- 🔄 Authentication integration
+- 🔄 Step entry UI
+- 🔄 Leaderboard display
+- 🔄 Push notifications
+- 🔄 Offline support
+
+**Priority**: Low (future enhancement)  
+**Status**: ❌ **Not started** - No Flutter app exists
+
+#### Smartwatch Integrations (8-12 hours each)
+- 🔄 Garmin API OAuth integration
+- 🔄 Fitbit API OAuth integration
 - 🔄 HealthKit sync (iOS)
 - 🔄 Health Connect sync (Android)
 - 🔄 OAuth flow for device connections
+- 🔄 Background sync jobs
 
 **Priority**: Low (future enhancement)  
-**Status**: Not started
+**Status**: ❌ **Not started** - Only data model placeholder exists
 
 #### AI Fairness Detection (6-8 hours)
 - 🔄 Implement fairness detection algorithm
@@ -297,7 +347,7 @@
 - 🔄 User notifications for flagged data
 
 **Priority**: Low (future enhancement)  
-**Status**: Not started
+**Status**: ❌ Not started
 
 #### Real-time Updates (4-6 hours)
 - 🔄 WebSocket support
@@ -306,7 +356,7 @@
 - 🔄 Push notifications
 
 **Priority**: Low (future enhancement)  
-**Status**: Not started
+**Status**: ❌ Not started
 
 ---
 
@@ -488,24 +538,36 @@
 | **Deployment** | ✅ Complete | 100% | All 4 services deployed |
 | **Firebase Auth** | 🔧 Ready | 95% | Infrastructure ready, needs testing |
 | **Production Ready** | ✅ Almost | 98% | Ready for hackathon demo |
+| **Mobile App** | ❌ Not Started | 0% | Flutter app not implemented |
+| **Smartwatch Integrations** | ❌ Not Started | 0% | Only data model placeholder |
 | **Monitoring** | 🔧 Optional | 0% | Not critical for hackathon |
 
 ---
 
 ## 🎯 Conclusion
 
-**StepSquad is production-ready for hackathon demonstration** with all core features implemented, tested, and deployed. The platform has:
+**StepSquad is production-ready for hackathon demonstration** with all **web-based MVP features** implemented, tested, and deployed. The platform has:
 
-- ✅ **Complete MVP** with all features working
+- ✅ **Complete Web MVP** with all features working
 - ✅ **88 Tests** ensuring code quality
 - ✅ **CI/CD Pipeline** for automated deployment
 - ✅ **Comprehensive Documentation** for onboarding
 - ✅ **Modern Architecture** for scalability
 - ✅ **Polished UI/UX** for great user experience
 
+### Important Notes:
+
+⚠️ **Mobile App & Smartwatch Integrations**: These are **NOT implemented**. They are:
+- Mentioned in README architecture diagrams as planned features
+- Listed in roadmap as future enhancements
+- Have placeholder support in the data model (`provider` field)
+- **Currently only manual step entry is available** via web UI
+
+**For Hackathon Demo**: ✅ **Ready** - The web application is fully functional with manual step entry. Mobile app and smartwatch integrations can be mentioned as future roadmap items.
+
 **The only remaining task is final Firebase authentication testing** (30 minutes), which is already 95% complete.
 
-**Recommendation**: ✅ **Ready for Hackathon Demo**
+**Recommendation**: ✅ **Ready for Hackathon Demo** (Web MVP only)
 
 ---
 
