@@ -547,15 +547,17 @@ class FairnessAgent:
                                 "count": len(user_ids)
                             })
                 
+                suspicious_count = (
+                    len(patterns["identical_values"]) +
+                    len(patterns["round_numbers"]) +
+                    len(patterns["perfect_days"])
+                )
+                
                 return {
                     "comp_id": comp_id,
                     "patterns": patterns,
-                    "suspicious_count": (
-                        len(patterns["identical_values"]) +
-                        len(patterns["round_numbers"]) +
-                        len(patterns["perfect_days"])
-                    ),
-                    "status": "suspicious_patterns_detected" if patterns["suspicious_count"] > 0 else "no_suspicious_patterns"
+                    "suspicious_count": suspicious_count,
+                    "status": "suspicious_patterns_detected" if suspicious_count > 0 else "no_suspicious_patterns"
                 }
             except Exception as e:
                 logging.error(f"Error checking patterns: {e}")
