@@ -1112,3 +1112,249 @@ def test_get_user_step_history_nonexistent_competition(client, admin_headers, me
     response = client.post("/ingest/steps", json=step_data, headers=member_headers)
     assert response.status_code == 404
     assert "Competition not found" in response.json()["detail"]
+
+
+# Leaderboard Tests
+def test_individual_leaderboard_with_competition(client, admin_headers, member_headers):
+    """Test individual leaderboard filtered by competition"""
+    # Create ACTIVE competition
+    comp_data = {
+        "comp_id": "test-lb-comp",
+        "name": "Leaderboard Competition",
+        "registration_open_date": "2025-01-01",
+        "start_date": "2025-02-01",
+        "end_date": "2025-03-01",
+        "max_teams": 10,
+        "max_members_per_team": 5,
+        "status": "ACTIVE"
+    }
+    client.post("/competitions", json=comp_data, headers=admin_headers)
+    
+    # Get user uids
+    member_me = client.get("/me", headers=member_headers)
+    member_uid = member_me.json()["uid"]
+    
+    admin_me = client.get("/me", headers=admin_headers)
+    admin_uid = admin_me.json()["uid"]
+    
+    # Create teams
+    team1_data = {
+        "name": "Team 1",
+        "comp_id": "test-lb-comp",
+        "owner_uid": member_uid
+    }
+    team1_response = client.post("/teams", json=team1_data, headers=member_headers)
+    team1_id = team1_response.json()["team_id"]
+    
+    team2_data = {
+        "name": "Team 2",
+        "comp_id": "test-lb-comp",
+        "owner_uid": admin_uid
+    }
+    client.post("/teams", json=team2_data, headers=admin_headers)
+    
+    # Join admin to team 2
+    join_data = {
+        "team_id": team1_id,
+        "uid": admin_uid
+    }
+    client.post("/teams/join", json=join_data, headers=admin_headers)
+    
+    # Submit steps
+    member_steps = {
+        "comp_id": "test-lb-comp",
+        "date": "2025-02-15",
+        "steps": 10000
+    }
+    client.post("/ingest/steps", json=member_steps, headers=member_headers)
+    
+    admin_steps = {
+        "comp_id": "test-lb-comp",
+        "date": "2025-02-15",
+        "steps": 15000
+    }
+    client.post("/ingest/steps", json=admin_steps, headers=admin_headers)
+    
+    # Get leaderboard
+    response = client.get("/leaderboard/individual?comp_id=test-lb-comp", headers=member_headers)
+    assert response.status_code == 200
+    data = response.json()
+    assert "rows" in data
+    assert len(data["rows"]) >= 2
+    
+    # Admin should be first (more steps)
+    assert data["rows"][0]["steps"] == 15000
+    assert data["rows"][0]["user_id"] == admin_uid
+    assert data["rows"][0]["rank"] == 1
+
+def test_individual_leaderboard_with_date(client, admin_headers, member_headers):
+    """Test individual leaderboard filtered by date"""
+    # Create ACTIVE competition
+    comp_data = {
+        "comp_id": "test-lb-date",
+        "name": "Date Competition",
+        "registration_open_date": "2025-01-01",
+        "start_date": "2025-02-01",
+        "end_date": "2025-03-01",
+        "max_teams": 10,
+        "max_members_per_team": 5,
+        "status": "ACTIVE"
+    }
+    client.post("/competitions", json=comp_data, headers=admin_headers)
+    
+    # Get user uid
+    member_me = client.get("/me", headers=member_headers)
+    member_uid = member_me.json()["uid"]
+    
+    # Create team
+    team_data = {
+        "name": "Date Team",
+        "comp_id": "test-lb-date",
+        "owner_uid": member_uid
+    }
+    client.post("/teams", json=team_data, headers=member_headers)
+    
+    # Submit steps for different dates
+    steps1 = {
+        "comp_id": "test-lb-date",
+        "date": "2025-02-15",
+        "steps": 10000
+    }
+    client.post("/ingest/steps", json=steps1, headers=member_headers)
+    
+    steps2 = {
+        "comp_id": "test-lb-date",
+        "date": "2025-02-16",
+        "steps": 5000
+    }
+    client.post("/ingest/steps", json=steps2, headers=member_headers)
+    
+    # Get leaderboard for specific date
+    response = client.get("/leaderboard/individual?comp_id=test-lb-date&date=2025-02-15", headers=member_headers)
+    assert response.status_code == 200
+    data = response.json()
+    assert len(data["rows"]) >= 1
+    assert data["rows"][0]["steps"] == 10000
+
+def test_team_leaderboard_with_competition(client, admin_headers, member_headers):
+    """Test team leaderboard filtered by competition"""
+    # Create ACTIVE competition
+    comp_data = {
+        "comp_id": "test-lb-team",
+        "name": "Team Leaderboard Competition",
+        "registration_open_date": "2025-01-01",
+        "start_date": "2025-02-01",
+        "end_date": "2025-03-01",
+        "max_teams": 10,
+        "max_members_per_team": 5,
+        "status": "ACTIVE"
+    }
+    client.post("/competitions", json=comp_data, headers=admin_headers)
+    
+    # Get user uids
+    member_me = client.get("/me", headers=member_headers)
+    member_uid = member_me.json()["uid"]
+    
+    admin_me = client.get("/me", headers=admin_headers)
+    admin_uid = admin_me.json()["uid"]
+    
+    # Create teams
+    team1_data = {
+        "name": "Team Alpha",
+        "comp_id": "test-lb-team",
+        "owner_uid": member_uid
+    }
+    team1_response = client.post("/teams", json=team1_data, headers=member_headers)
+    team1_id = team1_response.json()["team_id"]
+    
+    team2_data = {
+        "name": "Team Beta",
+        "comp_id": "test-lb-team",
+        "owner_uid": admin_uid
+    }
+    team2_response = client.post("/teams", json=team2_data, headers=admin_headers)
+    team2_id = team2_response.json()["team_id"]
+    
+    # Submit steps for each team
+    member_steps = {
+        "comp_id": "test-lb-team",
+        "date": "2025-02-15",
+        "steps": 10000
+    }
+    client.post("/ingest/steps", json=member_steps, headers=member_headers)
+    
+    admin_steps = {
+        "comp_id": "test-lb-team",
+        "date": "2025-02-15",
+        "steps": 15000
+    }
+    client.post("/ingest/steps", json=admin_steps, headers=admin_headers)
+    
+    # Get team leaderboard
+    response = client.get("/leaderboard/team?comp_id=test-lb-team", headers=member_headers)
+    assert response.status_code == 200
+    data = response.json()
+    assert "rows" in data
+    assert len(data["rows"]) >= 2
+    
+    # Team Beta should be first (more steps)
+    team_beta = next((t for t in data["rows"] if t["name"] == "Team Beta"), None)
+    assert team_beta is not None
+    assert team_beta["steps"] == 15000
+    assert team_beta["rank"] == 1
+
+def test_leaderboard_pagination(client, admin_headers, member_headers):
+    """Test leaderboard pagination"""
+    # Create ACTIVE competition
+    comp_data = {
+        "comp_id": "test-lb-pag",
+        "name": "Pagination Competition",
+        "registration_open_date": "2025-01-01",
+        "start_date": "2025-02-01",
+        "end_date": "2025-03-01",
+        "max_teams": 10,
+        "max_members_per_team": 5,
+        "status": "ACTIVE"
+    }
+    client.post("/competitions", json=comp_data, headers=admin_headers)
+    
+    # Get user uid
+    member_me = client.get("/me", headers=member_headers)
+    member_uid = member_me.json()["uid"]
+    
+    # Create team
+    team_data = {
+        "name": "Pagination Team",
+        "comp_id": "test-lb-pag",
+        "owner_uid": member_uid
+    }
+    client.post("/teams", json=team_data, headers=member_headers)
+    
+    # Submit steps
+    steps = {
+        "comp_id": "test-lb-pag",
+        "date": "2025-02-15",
+        "steps": 10000
+    }
+    client.post("/ingest/steps", json=steps, headers=member_headers)
+    
+    # Get leaderboard with pagination
+    response = client.get("/leaderboard/individual?comp_id=test-lb-pag&page=1&page_size=10", headers=member_headers)
+    assert response.status_code == 200
+    data = response.json()
+    assert "rows" in data
+    assert "total" in data
+    assert "page" in data
+    assert "page_size" in data
+    assert "total_pages" in data
+    assert data["page"] == 1
+    assert data["page_size"] == 10
+    assert len(data["rows"]) <= 10
+
+def test_leaderboard_requires_auth(client):
+    """Test that leaderboard requires authentication"""
+    response = client.get("/leaderboard/individual")
+    assert response.status_code == 401
+    
+    response = client.get("/leaderboard/team")
+    assert response.status_code == 401

@@ -239,30 +239,190 @@ def is_user_in_team_for_competition(uid: str, comp_id: str) -> bool:
         if uid in team.get("members", []):
             return True
     return False
-def individual_leaderboard(date: str | None):
-    if GCP_ENABLED and _fs_coll("daily_steps") and date:
-        qs = _fs_coll("daily_steps").where("date","==",date).stream()
-        rows = [{"user_id": d.get("user_id"), "steps": int(d.get("steps",0))} for d in (x.to_dict() for x in qs)]
-    elif date:
-        rows = [{"user_id": uid, "steps": s} for (uid, d), s in DAILY_STEPS.items() if d == date]
-    else:
-        agg = {}
-        for (uid, d), s in DAILY_STEPS.items(): agg[uid]=agg.get(uid,0)+s
-        rows = [{"user_id": uid, "steps": steps} for uid, steps in agg.items()]
-    rows.sort(key=lambda r: r["steps"], reverse=True); return rows
-def team_leaderboard(date: str | None):
-    members = TEAM_MEMBERS.copy()
-    teams_local = TEAMS.copy()
-    if GCP_ENABLED and _fs_coll("team_members") and _fs_coll("teams"):
-        for doc in _fs_coll("team_members").stream(): members[doc.id] = doc.to_dict().get("members",[])
-        for tdoc in _fs_coll("teams").stream(): teams_local[tdoc.id] = tdoc.to_dict()
-    result=[]
-    for team_id, mlist in members.items():
+def individual_leaderboard(
+    comp_id: str | None = None,
+    date: str | None = None,
+    start_date: str | None = None,
+    end_date: str | None = None,
+    team_id: str | None = None,
+) -> list[dict]:
+    """Get individual leaderboard with optional filters"""
+    # If filtering by competition, we need to get teams in that competition
+    user_ids_in_comp = set()
+    if comp_id:
+        teams = get_teams(comp_id=comp_id)
+        for team in teams:
+            user_ids_in_comp.update(team.get("members", []))
+    
+    # If filtering by team, get team members
+    user_ids_in_team = set()
+    if team_id:
+        team = get_team(team_id)
+        if team:
+            user_ids_in_team.update(team.get("members", []))
+    
+    # Aggregate steps by user
+    agg = {}
+    if GCP_ENABLED and _fs_coll("daily_steps"):
+        query = _fs_coll("daily_steps")
+        
+        # Apply date filters
         if date:
-            total = sum(DAILY_STEPS.get((m, date), 0) for m in mlist)
+            query = query.where("date", "==", date)
+        elif start_date and end_date:
+            query = query.where("date", ">=", start_date).where("date", "<=", end_date)
+        elif start_date:
+            query = query.where("date", ">=", start_date)
+        elif end_date:
+            query = query.where("date", "<=", end_date)
+        
+        docs = query.stream()
+        for doc in docs:
+            doc_data = doc.to_dict()
+            uid = doc_data.get("user_id")
+            step_date = doc_data.get("date")
+            steps = int(doc_data.get("steps", 0))
+            
+            # Apply filters
+            if comp_id and uid not in user_ids_in_comp:
+                continue
+            if team_id and uid not in user_ids_in_team:
+                continue
+            if date and step_date != date:
+                continue
+            if start_date and step_date < start_date:
+                continue
+            if end_date and step_date > end_date:
+                continue
+            
+            agg[uid] = agg.get(uid, 0) + steps
+    else:
+        # Local storage
+        for (uid, step_date), steps in DAILY_STEPS.items():
+            # Apply filters
+            if comp_id and uid not in user_ids_in_comp:
+                continue
+            if team_id and uid not in user_ids_in_team:
+                continue
+            if date and step_date != date:
+                continue
+            if start_date and step_date < start_date:
+                continue
+            if end_date and step_date > end_date:
+                continue
+            
+            agg[uid] = agg.get(uid, 0) + steps
+    
+    # Convert to rows with user info
+    rows = []
+    for uid, total_steps in agg.items():
+        user_info = get_user(uid) or {}
+        rows.append({
+            "user_id": uid,
+            "email": user_info.get("email", uid),
+            "steps": total_steps,
+            "rank": 0,  # Will be set after sorting
+        })
+    
+    # Sort by steps descending
+    rows.sort(key=lambda r: r["steps"], reverse=True)
+    
+    # Assign ranks (handle ties)
+    rank = 1
+    for i, row in enumerate(rows):
+        if i > 0 and rows[i-1]["steps"] != row["steps"]:
+            rank = i + 1
+        row["rank"] = rank
+    
+    return rows
+def team_leaderboard(
+    comp_id: str | None = None,
+    date: str | None = None,
+    start_date: str | None = None,
+    end_date: str | None = None,
+) -> list[dict]:
+    """Get team leaderboard with optional filters"""
+    # Get teams (optionally filtered by competition)
+    if comp_id:
+        teams = get_teams(comp_id=comp_id)
+    else:
+        teams = get_teams()
+    
+    # Aggregate steps by team
+    result = []
+    for team in teams:
+        team_id = team.get("team_id")
+        team_name = team.get("name", team_id)
+        members = team.get("members", [])
+        
+        if not members:
+            continue
+        
+        total_steps = 0
+        if GCP_ENABLED and _fs_coll("daily_steps"):
+            query = _fs_coll("daily_steps")
+            
+            # Filter by members
+            # Note: Firestore doesn't support IN queries with multiple values easily
+            # So we'll query all and filter in memory
+            if date:
+                query = query.where("date", "==", date)
+            elif start_date and end_date:
+                query = query.where("date", ">=", start_date).where("date", "<=", end_date)
+            elif start_date:
+                query = query.where("date", ">=", start_date)
+            elif end_date:
+                query = query.where("date", "<=", end_date)
+            
+            docs = query.stream()
+            for doc in docs:
+                doc_data = doc.to_dict()
+                uid = doc_data.get("user_id")
+                step_date = doc_data.get("date")
+                steps = int(doc_data.get("steps", 0))
+                
+                if uid in members:
+                    if date and step_date == date:
+                        total_steps += steps
+                    elif not date:
+                        if start_date and step_date < start_date:
+                            continue
+                        if end_date and step_date > end_date:
+                            continue
+                        total_steps += steps
+                    elif not date and start_date and end_date:
+                        if start_date <= step_date <= end_date:
+                            total_steps += steps
         else:
-            total = 0
-            for (uid, d), s in DAILY_STEPS.items():
-                if uid in mlist: total += s
-        result.append({"team_id": team_id, "name": teams_local.get(team_id, {}).get("name", team_id), "steps": total})
-    result.sort(key=lambda r: r["steps"], reverse=True); return result
+            # Local storage
+            if date:
+                total_steps = sum(DAILY_STEPS.get((uid, date), 0) for uid in members)
+            else:
+                for (uid, step_date), steps in DAILY_STEPS.items():
+                    if uid in members:
+                        if start_date and step_date < start_date:
+                            continue
+                        if end_date and step_date > end_date:
+                            continue
+                        total_steps += steps
+        
+        result.append({
+            "team_id": team_id,
+            "name": team_name,
+            "comp_id": team.get("comp_id"),
+            "steps": total_steps,
+            "member_count": len(members),
+            "rank": 0,  # Will be set after sorting
+        })
+    
+    # Sort by steps descending
+    result.sort(key=lambda r: r["steps"], reverse=True)
+    
+    # Assign ranks (handle ties)
+    rank = 1
+    for i, team in enumerate(result):
+        if i > 0 and result[i-1]["steps"] != team["steps"]:
+            rank = i + 1
+        team["rank"] = rank
+    
+    return result

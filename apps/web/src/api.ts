@@ -1,4 +1,4 @@
-import { User, Competition, CompetitionCreateRequest, CompetitionUpdateRequest, ApiError, Team, TeamCreateRequest, TeamJoinRequest, StepIngestRequest, StepIngestResponse, StepHistoryResponse } from './types';
+import { User, Competition, CompetitionCreateRequest, CompetitionUpdateRequest, ApiError, Team, TeamCreateRequest, TeamJoinRequest, StepIngestRequest, StepIngestResponse, StepHistoryResponse, LeaderboardResponse } from './types';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080';
 const USE_DEV_AUTH = import.meta.env.VITE_USE_DEV_AUTH === 'true';
@@ -234,6 +234,57 @@ class ApiClient {
     const url = compId 
       ? `${API_BASE_URL}/users/${uid}/steps?comp_id=${compId}`
       : `${API_BASE_URL}/users/${uid}/steps`;
+    const response = await fetch(url, {
+      headers,
+    });
+    return this.handleResponse(response);
+  }
+
+  // Leaderboards
+  async getIndividualLeaderboard(params?: {
+    comp_id?: string;
+    date?: string;
+    start_date?: string;
+    end_date?: string;
+    team_id?: string;
+    page?: number;
+    page_size?: number;
+  }): Promise<LeaderboardResponse> {
+    const headers = await this.getAuthHeaders();
+    const queryParams = new URLSearchParams();
+    if (params?.comp_id) queryParams.append('comp_id', params.comp_id);
+    if (params?.date) queryParams.append('date', params.date);
+    if (params?.start_date) queryParams.append('start_date', params.start_date);
+    if (params?.end_date) queryParams.append('end_date', params.end_date);
+    if (params?.team_id) queryParams.append('team_id', params.team_id);
+    if (params?.page) queryParams.append('page', params.page.toString());
+    if (params?.page_size) queryParams.append('page_size', params.page_size.toString());
+    
+    const url = `${API_BASE_URL}/leaderboard/individual${queryParams.toString() ? '?' + queryParams.toString() : ''}`;
+    const response = await fetch(url, {
+      headers,
+    });
+    return this.handleResponse(response);
+  }
+
+  async getTeamLeaderboard(params?: {
+    comp_id?: string;
+    date?: string;
+    start_date?: string;
+    end_date?: string;
+    page?: number;
+    page_size?: number;
+  }): Promise<LeaderboardResponse> {
+    const headers = await this.getAuthHeaders();
+    const queryParams = new URLSearchParams();
+    if (params?.comp_id) queryParams.append('comp_id', params.comp_id);
+    if (params?.date) queryParams.append('date', params.date);
+    if (params?.start_date) queryParams.append('start_date', params.start_date);
+    if (params?.end_date) queryParams.append('end_date', params.end_date);
+    if (params?.page) queryParams.append('page', params.page.toString());
+    if (params?.page_size) queryParams.append('page_size', params.page_size.toString());
+    
+    const url = `${API_BASE_URL}/leaderboard/team${queryParams.toString() ? '?' + queryParams.toString() : ''}`;
     const response = await fetch(url, {
       headers,
     });

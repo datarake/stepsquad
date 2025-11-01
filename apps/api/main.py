@@ -391,12 +391,105 @@ def get_user_step_history(uid: str, comp_id: str | None = None, current_user: Us
     return {"rows": steps}
 
 @app.get("/leaderboard/individual")
-def leaderboard_individual(date: str | None = None):
-    return {"rows": individual_leaderboard(date)}
+def leaderboard_individual(
+    comp_id: str | None = None,
+    date: str | None = None,
+    start_date: str | None = None,
+    end_date: str | None = None,
+    team_id: str | None = None,
+    page: int = 1,
+    page_size: int = 50,
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Get individual leaderboard.
+    
+    Query parameters:
+    - comp_id: Filter by competition
+    - date: Filter by specific date (YYYY-MM-DD)
+    - start_date: Filter by date range start (YYYY-MM-DD)
+    - end_date: Filter by date range end (YYYY-MM-DD)
+    - team_id: Filter by team
+    - page: Page number (default: 1)
+    - page_size: Items per page (default: 50, max: 100)
+    """
+    # Validate pagination
+    page = max(1, page)
+    page_size = min(max(1, page_size), 100)
+    
+    # Get all results
+    rows = individual_leaderboard(
+        comp_id=comp_id,
+        date=date,
+        start_date=start_date,
+        end_date=end_date,
+        team_id=team_id,
+    )
+    
+    # Apply pagination
+    total = len(rows)
+    start = (page - 1) * page_size
+    end = start + page_size
+    paginated_rows = rows[start:end]
+    
+    total_pages = (total + page_size - 1) // page_size if page_size > 0 else 0
+    
+    return {
+        "rows": paginated_rows,
+        "total": total,
+        "page": page,
+        "page_size": page_size,
+        "total_pages": total_pages,
+    }
 
 @app.get("/leaderboard/team")
-def leaderboard_team(date: str | None = None):
-    return {"rows": team_leaderboard(date)}
+def leaderboard_team(
+    comp_id: str | None = None,
+    date: str | None = None,
+    start_date: str | None = None,
+    end_date: str | None = None,
+    page: int = 1,
+    page_size: int = 50,
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Get team leaderboard.
+    
+    Query parameters:
+    - comp_id: Filter by competition (required for competition-specific leaderboards)
+    - date: Filter by specific date (YYYY-MM-DD)
+    - start_date: Filter by date range start (YYYY-MM-DD)
+    - end_date: Filter by date range end (YYYY-MM-DD)
+    - page: Page number (default: 1)
+    - page_size: Items per page (default: 50, max: 100)
+    """
+    # Validate pagination
+    page = max(1, page)
+    page_size = min(max(1, page_size), 100)
+    
+    # Get all results
+    rows = team_leaderboard(
+        comp_id=comp_id,
+        date=date,
+        start_date=start_date,
+        end_date=end_date,
+    )
+    
+    # Apply pagination
+    total = len(rows)
+    start = (page - 1) * page_size
+    end = start + page_size
+    paginated_rows = rows[start:end]
+    
+    total_pages = (total + page_size - 1) // page_size if page_size > 0 else 0
+    
+    return {
+        "rows": paginated_rows,
+        "total": total,
+        "page": page,
+        "page_size": page_size,
+        "total_pages": total_pages,
+    }
 
 @app.get("/competitions/{comp_id}/teams")
 def get_competition_teams(comp_id: str, current_user: User = Depends(get_current_user)):

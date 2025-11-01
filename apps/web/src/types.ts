@@ -97,3 +97,22 @@ export interface StepIngestResponse {
   date: string;
   steps: number;
 }
+
+export interface LeaderboardEntry {
+  user_id?: string;
+  team_id?: string;
+  email?: string;
+  name?: string;
+  steps: number;
+  rank: number;
+  member_count?: number;
+  comp_id?: string;
+}
+
+export interface LeaderboardResponse {
+  rows: LeaderboardEntry[];
+  total: number;
+  page: number;
+  page_size: number;
+  total_pages: number;
+}

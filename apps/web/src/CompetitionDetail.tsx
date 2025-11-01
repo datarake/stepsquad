@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Calendar, Users, Settings, Archive, ArrowLeft, Plus, Activity } from 'lucide-react';
+import { Calendar, Users, Settings, Archive, ArrowLeft, Plus, Activity, Trophy } from 'lucide-react';
 import { Competition, Status, Team, TeamCreateRequest, StepIngestRequest } from './types';
 import { useAuth } from './auth';
 import { apiClient } from './api';
@@ -10,6 +10,8 @@ import { TeamList } from './TeamList';
 import { TeamCreateForm } from './TeamCreateForm';
 import { StepEntryForm } from './StepEntryForm';
 import { StepHistory } from './StepHistory';
+import { IndividualLeaderboard } from './IndividualLeaderboard';
+import { TeamLeaderboard } from './TeamLeaderboard';
 
 interface CompetitionDetailProps {
   competition: Competition;
@@ -37,6 +39,8 @@ export function CompetitionDetail({ competition }: CompetitionDetailProps) {
   const queryClient = useQueryClient();
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [showStepEntryForm, setShowStepEntryForm] = useState(false);
+  const [activeTab, setActiveTab] = useState<'individual' | 'team'>('individual');
+  const [leaderboardDate, setLeaderboardDate] = useState<string | undefined>(undefined);
 
   // Fetch teams for this competition
   const { data: teamsData, isLoading: teamsLoading } = useQuery({
@@ -137,6 +141,8 @@ export function CompetitionDetail({ competition }: CompetitionDetailProps) {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['user-steps', user?.uid, competition.comp_id] });
       queryClient.invalidateQueries({ queryKey: ['competition-teams', competition.comp_id] });
+      queryClient.invalidateQueries({ queryKey: ['individual-leaderboard', competition.comp_id] });
+      queryClient.invalidateQueries({ queryKey: ['team-leaderboard', competition.comp_id] });
       toast.success('Steps submitted successfully');
       setShowStepEntryForm(false);
     },
@@ -148,6 +154,38 @@ export function CompetitionDetail({ competition }: CompetitionDetailProps) {
   const handleSubmitSteps = async (data: StepIngestRequest) => {
     await submitStepsMutation.mutateAsync(data);
   };
+
+  // Find user's team ID
+  const userTeam = user ? teams.find(team => team.members.includes(user.uid)) : undefined;
+  const userTeamId = userTeam?.team_id;
+
+  // Fetch leaderboards
+  const { data: individualLeaderboardData, isLoading: individualLoading } = useQuery({
+    queryKey: ['individual-leaderboard', competition.comp_id, leaderboardDate],
+    queryFn: () => apiClient.getIndividualLeaderboard({
+      comp_id: competition.comp_id,
+      date: leaderboardDate,
+      start_date: leaderboardDate ? undefined : competition.start_date,
+      end_date: leaderboardDate ? undefined : competition.end_date,
+      page_size: 50,
+    }),
+    enabled: !!competition.comp_id,
+    retry: 1,
+  });
+
+  const { data: teamLeaderboardData, isLoading: teamLoading } = useQuery({
+    queryKey: ['team-leaderboard', competition.comp_id, leaderboardDate],
+    queryFn: () => apiClient.getTeamLeaderboard({
+      comp_id: competition.comp_id,
+      date: leaderboardDate,
+      start_date: leaderboardDate ? undefined : competition.start_date,
+      end_date: leaderboardDate ? undefined : competition.end_date,
+      page_size: 50,
+    }),
+    enabled: !!competition.comp_id,
+    retry: 1,
+  });
+
 
   return (
     <div className="max-w-4xl mx-auto">
@@ -373,6 +411,90 @@ export function CompetitionDetail({ competition }: CompetitionDetailProps) {
           )}
         </>
       )}
+
+      {/* Leaderboards Section */}
+      <div className="mt-6 bg-white shadow sm:rounded-lg">
+        <div className="px-4 py-5 sm:p-6">
+          <div className="flex justify-between items-center mb-6">
+            <div>
+              <h2 className="text-xl font-bold text-gray-900 flex items-center">
+                <Trophy className="h-5 w-5 mr-2" />
+                Leaderboards
+              </h2>
+              <p className="mt-1 text-sm text-gray-500">
+                Rankings for {competition.name}
+              </p>
+            </div>
+            
+            {/* Date Filter */}
+            <div className="flex items-center space-x-2">
+              <label htmlFor="leaderboard-date" className="text-sm text-gray-700">
+                Filter by date:
+              </label>
+              <input
+                type="date"
+                id="leaderboard-date"
+                className="rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                value={leaderboardDate || ''}
+                onChange={(e) => setLeaderboardDate(e.target.value || undefined)}
+                min={competition.start_date}
+                max={competition.end_date}
+              />
+              {leaderboardDate && (
+                <button
+                  onClick={() => setLeaderboardDate(undefined)}
+                  className="text-sm text-blue-600 hover:text-blue-700"
+                >
+                  Clear
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Tabs */}
+          <div className="border-b border-gray-200 mb-6">
+            <nav className="-mb-px flex space-x-8">
+              <button
+                onClick={() => setActiveTab('individual')}
+                className={`${
+                  activeTab === 'individual'
+                    ? 'border-blue-500 text-blue-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm`}
+              >
+                Individual
+              </button>
+              <button
+                onClick={() => setActiveTab('team')}
+                className={`${
+                  activeTab === 'team'
+                    ? 'border-blue-500 text-blue-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm`}
+              >
+                Teams
+              </button>
+            </nav>
+          </div>
+
+          {/* Leaderboard Content */}
+          {activeTab === 'individual' && (
+            <IndividualLeaderboard
+              entries={individualLeaderboardData?.rows || []}
+              isLoading={individualLoading}
+              currentUserId={user?.uid}
+            />
+          )}
+
+          {activeTab === 'team' && (
+            <TeamLeaderboard
+              entries={teamLeaderboardData?.rows || []}
+              isLoading={teamLoading}
+              currentUserTeamId={userTeamId}
+            />
+          )}
+        </div>
+      </div>
     </div>
   );
 }
