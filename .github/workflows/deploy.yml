@@ -55,24 +55,26 @@ jobs:
         env:
           PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
         run: |
-          gcloud services enable artifactregistry.googleapis.com --project=$PROJECT_ID || echo "API may already be enabled or insufficient permissions (non-fatal)"
+          gcloud services enable artifactregistry.googleapis.com --project=$PROJECT_ID 2>&1 | grep -v "PERMISSION_DENIED" || echo "ℹ️  API may already be enabled or requires manual activation (non-fatal)"
       
       - name: Create Artifact Registry repository if not exists
         env:
           PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
         run: |
-          if ! gcloud artifacts repositories describe ${{ env.AR_REPO }} --location=${{ env.REGION }} --project=$PROJECT_ID 2>/dev/null; then
+          if gcloud artifacts repositories describe ${{ env.AR_REPO }} --location=${{ env.REGION }} --project=$PROJECT_ID 2>/dev/null; then
+            echo "✅ Artifact Registry repository already exists: ${{ env.AR_REPO }}"
+          else
             echo "Creating Artifact Registry repository: ${{ env.AR_REPO }}"
-            if ! gcloud artifacts repositories create ${{ env.AR_REPO }} \
+            if gcloud artifacts repositories create ${{ env.AR_REPO }} \
               --repository-format=docker \
               --location=${{ env.REGION }} \
               --project=$PROJECT_ID 2>&1; then
-              echo "WARNING: Failed to create repository. It may need to be created manually."
-              echo "See ARTIFACT_REGISTRY_SETUP.md for manual creation instructions."
-              echo "Attempting to continue - repository may already exist..."
+              echo "✅ Repository created successfully"
+            else
+              echo "⚠️  WARNING: Failed to create repository (permissions issue)"
+              echo "📖 See SETUP_ARTIFACT_REGISTRY.md for manual creation instructions"
+              echo "ℹ️  Repository may already exist or needs to be created manually by project owner"
             fi
-          else
-            echo "Artifact Registry repository already exists: ${{ env.AR_REPO }}"
           fi
       
       - name: Build API Image
