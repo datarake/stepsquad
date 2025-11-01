@@ -24,17 +24,30 @@ jobs:
       
       - name: Set project
         run: |
-          gcloud config set project ${{ secrets.GCP_PROJECT_ID }}
+          if [ -z "${{ secrets.GCP_PROJECT_ID }}" ]; then
+            echo "Error: GCP_PROJECT_ID secret is not set"
+            exit 1
+          fi
+          gcloud config set project "${{ secrets.GCP_PROJECT_ID }}"
+          gcloud config list
       
       - name: Build API Image
+        env:
+          PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
         run: |
+          if [ -z "$PROJECT_ID" ]; then
+            echo "Error: PROJECT_ID is not set"
+            exit 1
+          fi
           cd apps/api
-          gcloud builds submit --tag gcr.io/${{ secrets.GCP_PROJECT_ID }}/stepsquad-api:${{ github.sha }}
+          gcloud builds submit --tag gcr.io/$PROJECT_ID/stepsquad-api:${{ github.sha }}
       
       - name: Deploy to Cloud Run
+        env:
+          PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
         run: |
           gcloud run deploy stepsquad-api \
-            --image gcr.io/${{ secrets.GCP_PROJECT_ID }}/stepsquad-api:${{ github.sha }} \
+            --image gcr.io/$PROJECT_ID/stepsquad-api:${{ github.sha }} \
             --platform managed \
             --region ${{ env.REGION }} \
             --allow-unauthenticated \
@@ -58,29 +71,43 @@ jobs:
       
       - name: Set project
         run: |
-          gcloud config set project ${{ secrets.GCP_PROJECT_ID }}
+          if [ -z "${{ secrets.GCP_PROJECT_ID }}" ]; then
+            echo "Error: GCP_PROJECT_ID secret is not set"
+            exit 1
+          fi
+          gcloud config set project "${{ secrets.GCP_PROJECT_ID }}"
+          gcloud config list
       
       - name: Get API URL
         id: get-api-url
+        env:
+          PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
         run: |
           API_URL=$(gcloud run services describe stepsquad-api --region ${{ env.REGION }} --format 'value(status.url)')
           echo "api_url=$API_URL" >> $GITHUB_OUTPUT
       
       - name: Build Web Image
         env:
+          PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
           VITE_API_BASE_URL: ${{ steps.get-api-url.outputs.api_url }}
           VITE_USE_DEV_AUTH: 'false'
         run: |
+          if [ -z "$PROJECT_ID" ]; then
+            echo "Error: PROJECT_ID is not set"
+            exit 1
+          fi
           cd apps/web
           # Create .env.production with build-time variables
           echo "VITE_API_BASE_URL=${{ steps.get-api-url.outputs.api_url }}" > .env.production
           echo "VITE_USE_DEV_AUTH=false" >> .env.production
-          gcloud builds submit --tag gcr.io/${{ secrets.GCP_PROJECT_ID }}/stepsquad-web:${{ github.sha }}
+          gcloud builds submit --tag gcr.io/$PROJECT_ID/stepsquad-web:${{ github.sha }}
       
       - name: Deploy to Cloud Run
+        env:
+          PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
         run: |
           gcloud run deploy stepsquad-web \
-            --image gcr.io/${{ secrets.GCP_PROJECT_ID }}/stepsquad-web:${{ github.sha }} \
+            --image gcr.io/$PROJECT_ID/stepsquad-web:${{ github.sha }} \
             --platform managed \
             --region ${{ env.REGION }} \
             --allow-unauthenticated \
@@ -101,10 +128,17 @@ jobs:
       
       - name: Set project
         run: |
-          gcloud config set project ${{ secrets.GCP_PROJECT_ID }}
+          if [ -z "${{ secrets.GCP_PROJECT_ID }}" ]; then
+            echo "Error: GCP_PROJECT_ID secret is not set"
+            exit 1
+          fi
+          gcloud config set project "${{ secrets.GCP_PROJECT_ID }}"
+          gcloud config list
       
       - name: Get URLs
         id: get-urls
+        env:
+          PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
         run: |
           API_URL=$(gcloud run services describe stepsquad-api --region ${{ env.REGION }} --format 'value(status.url)')
           WEB_URL=$(gcloud run services describe stepsquad-web --region ${{ env.REGION }} --format 'value(status.url)')
