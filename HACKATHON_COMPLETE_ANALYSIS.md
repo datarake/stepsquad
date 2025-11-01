@@ -295,13 +295,30 @@
 - ⚠️ Currently only `"manual"` provider is functional
 - ⚠️ Smartwatch providers are just placeholder values in the data model
 
+#### AI Agents (Google ADK)
+- ❌ **No Google ADK implementation**
+- ✅ `apps/agents/` directory exists with FastAPI service
+- ✅ Two agents defined: `"sync"` and `"fairness"`
+- ⚠️ But they are just **stub/placeholder implementations**:
+  - `sync` agent: Returns `{"ok": True, "agent": "sync", "actions": []}`
+  - `fairness` agent: Returns `{"ok": True, "agent": "fairness", "flags": []}`
+- ⚠️ **NO Google ADK (Agent Development Kit) integration**
+- ⚠️ **NO actual AI/fairness detection logic**
+- ⚠️ **NO actual sync logic**
+- ⚠️ Mentioned in README as using "Google ADK (Agent Development Kit)" but not implemented
+
 **What Exists:**
 - ✅ API endpoint accepts `provider` parameter in `POST /ingest/steps`
 - ✅ Database stores provider name (garmin, fitbit, healthkit, manual)
+- ✅ `apps/agents/` service deployed and running
+- ✅ Two agent endpoints: `sync` and `fairness`
 - ❌ NO OAuth implementation for Garmin/Fitbit
 - ❌ NO HealthKit integration for iOS
 - ❌ NO Health Connect integration for Android
 - ❌ NO mobile app to access device sensors
+- ❌ NO Google ADK (Agent Development Kit) integration
+- ❌ NO actual AI/fairness detection logic
+- ❌ NO actual sync logic
 
 **What's Planned:**
 - 📋 Flutter mobile app (mentioned in README)
@@ -309,8 +326,11 @@
 - 📋 Fitbit API OAuth integration (8-12 hours)
 - 📋 HealthKit sync for iOS (4-6 hours)
 - 📋 Health Connect sync for Android (4-6 hours)
+- 📋 Google ADK integration for AI agents (8-12 hours)
+- 📋 Fairness detection algorithm (6-8 hours)
+- 📋 Sync agent implementation (4-6 hours)
 
-**Current State**: ✅ **Manual step entry only** - Users must manually enter step counts via web UI
+**Current State**: ✅ **Manual step entry only** - Users must manually enter step counts via web UI. Agents are stub implementations with no actual logic.
 
 ---
 
@@ -340,14 +360,21 @@
 **Priority**: Low (future enhancement)  
 **Status**: ❌ **Not started** - Only data model placeholder exists
 
-#### AI Fairness Detection (6-8 hours)
-- 🔄 Implement fairness detection algorithm
+#### AI Fairness Detection & Google ADK (14-20 hours)
+- 🔄 Google ADK (Agent Development Kit) integration
+- 🔄 Implement fairness detection algorithm using ADK
 - 🔄 Flag unrealistic step data
 - 🔄 Admin review queue
 - 🔄 User notifications for flagged data
+- 🔄 Sync agent implementation
+- 🔄 Background sync jobs
 
 **Priority**: Low (future enhancement)  
-**Status**: ❌ Not started
+**Status**: ❌ **Not started** - Only stub implementations exist:
+- `sync` agent: Returns empty actions `[]`
+- `fairness` agent: Returns empty flags `[]`
+- No Google ADK integration
+- No actual AI logic
 
 #### Real-time Updates (4-6 hours)
 - 🔄 WebSocket support
@@ -540,6 +567,7 @@
 | **Production Ready** | ✅ Almost | 98% | Ready for hackathon demo |
 | **Mobile App** | ❌ Not Started | 0% | Flutter app not implemented |
 | **Smartwatch Integrations** | ❌ Not Started | 0% | Only data model placeholder |
+| **AI Agents (Google ADK)** | ❌ Stub Only | 5% | Service deployed but no ADK, just placeholder logic |
 | **Monitoring** | 🔧 Optional | 0% | Not critical for hackathon |
 
 ---
