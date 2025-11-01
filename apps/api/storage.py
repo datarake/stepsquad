@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import Dict, Tuple, List
+from typing import Dict, Tuple, List, Optional
 import os
 from gcp_clients import fs, bq
 GCP_ENABLED = os.getenv("GCP_ENABLED", "false").lower() == "true"
@@ -35,6 +35,82 @@ def create_competition(comp_id: str, data: dict):
     if GCP_ENABLED and _fs_coll("competitions"):
         _fs_coll("competitions").document(comp_id).set(data, merge=True)
     COMPETITIONS[comp_id] = data
+
+def get_user(uid: str) -> dict | None:
+    if GCP_ENABLED and _fs_coll("users"):
+        doc = _fs_coll("users").document(uid).get()
+        return doc.to_dict() if doc.exists else None
+    return USERS.get(uid)
+
+def get_all_users() -> list[dict]:
+    """Get all users"""
+    if GCP_ENABLED and _fs_coll("users"):
+        docs = _fs_coll("users").stream()
+        return [doc.to_dict() for doc in docs]
+    return list(USERS.values())
+
+def get_competition(comp_id: str) -> dict | None:
+    if GCP_ENABLED and _fs_coll("competitions"):
+        doc = _fs_coll("competitions").document(comp_id).get()
+        return doc.to_dict() if doc.exists else None
+    return COMPETITIONS.get(comp_id)
+
+def get_competitions(status: Optional[str] = None, tz: Optional[str] = None, search: Optional[str] = None) -> list[dict]:
+    """Get competitions with optional filters"""
+    if GCP_ENABLED and _fs_coll("competitions"):
+        query = _fs_coll("competitions")
+        
+        # Apply filters
+        if status:
+            query = query.where("status", "==", status)
+        if tz:
+            query = query.where("tz", "==", tz)
+        
+        docs = query.order_by("created_at", direction="DESCENDING").stream()
+        competitions = [doc.to_dict() for doc in docs]
+        
+        # Apply search if needed (Firestore doesn't support full-text search easily)
+        if search:
+            search_lower = search.lower()
+            competitions = [
+                c for c in competitions
+                if search_lower in c.get("name", "").lower() 
+                or search_lower in c.get("comp_id", "").lower()
+            ]
+        
+        return competitions
+    
+    # Local storage: sort by created_at desc
+    competitions = list(COMPETITIONS.values())
+    competitions.sort(key=lambda x: x.get("created_at", ""), reverse=True)
+    
+    # Apply filters
+    if status:
+        competitions = [c for c in competitions if c.get("status") == status]
+    if tz:
+        competitions = [c for c in competitions if c.get("tz") == tz]
+    if search:
+        search_lower = search.lower()
+        competitions = [
+            c for c in competitions
+            if search_lower in c.get("name", "").lower() 
+            or search_lower in c.get("comp_id", "").lower()
+        ]
+    
+    return competitions
+
+def update_competition(comp_id: str, data: dict):
+    if GCP_ENABLED and _fs_coll("competitions"):
+        _fs_coll("competitions").document(comp_id).set(data, merge=True)
+    if comp_id in COMPETITIONS:
+        COMPETITIONS[comp_id].update(data)
+
+def delete_competition(comp_id: str):
+    # This function is not used anymore since we implement soft delete in the API
+    # Keeping for backward compatibility but API uses update_competition for soft delete
+    if GCP_ENABLED and _fs_coll("competitions"):
+        _fs_coll("competitions").document(comp_id).delete()
+    COMPETITIONS.pop(comp_id, None)
 def write_daily_steps(uid: str, date: str, steps: int):
     key = (uid, date); prev = DAILY_STEPS.get(key, 0); new_steps = max(prev, steps)
     DAILY_STEPS[key] = new_steps
