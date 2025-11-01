@@ -74,16 +74,45 @@ def verify_id_token(id_token: str) -> Dict:
         decoded_token = auth.verify_id_token(id_token)
         return decoded_token
     except auth.InvalidIdTokenError as e:
-        logging.warning(f"Invalid Firebase ID token: {e}")
+        logging.warning(
+            "Invalid Firebase ID token",
+            extra={
+                "error_type": "InvalidIdTokenError",
+                "error_message": str(e),
+                "error_code": getattr(e, "code", "INVALID_TOKEN")
+            }
+        )
         raise ValueError("Invalid authentication token")
     except auth.ExpiredIdTokenError as e:
-        logging.warning(f"Expired Firebase ID token: {e}")
+        logging.warning(
+            "Expired Firebase ID token",
+            extra={
+                "error_type": "ExpiredIdTokenError",
+                "error_message": str(e),
+                "error_code": getattr(e, "code", "EXPIRED_TOKEN")
+            }
+        )
         raise ValueError("Authentication token has expired")
     except FirebaseError as e:
-        logging.error(f"Firebase error verifying token: {e}")
+        logging.error(
+            "Firebase error verifying token",
+            extra={
+                "error_type": "FirebaseError",
+                "error_message": str(e),
+                "error_code": getattr(e, "code", "FIREBASE_ERROR")
+            },
+            exc_info=True
+        )
         raise ValueError(f"Authentication error: {str(e)}")
     except Exception as e:
-        logging.error(f"Unexpected error verifying Firebase token: {e}")
+        logging.error(
+            "Unexpected error verifying Firebase token",
+            extra={
+                "error_type": type(e).__name__,
+                "error_message": str(e)
+            },
+            exc_info=True
+        )
         raise ValueError("Authentication verification failed")
 
 def get_user_role_from_token(decoded_token: Dict) -> str:

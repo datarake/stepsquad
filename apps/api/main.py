@@ -197,7 +197,32 @@ async def get_current_user(
 
 @app.get("/health")
 def health():
-    return {"ok": True, "time": datetime.utcnow().isoformat(), "tz": COMP_TZ}
+    """Health check endpoint with system status"""
+    from firebase_auth import init_firebase
+    
+    health_status = {
+        "ok": True,
+        "time": datetime.utcnow().isoformat(),
+        "tz": COMP_TZ,
+        "gcp_enabled": os.getenv("GCP_ENABLED", "false").lower() == "true",
+    }
+    
+    # Check Firebase initialization status
+    if health_status["gcp_enabled"]:
+        try:
+            firebase_app = init_firebase()
+            health_status["firebase_initialized"] = firebase_app is not None
+            if firebase_app is None:
+                health_status["firebase_error"] = "Firebase initialization returned None"
+        except Exception as e:
+            health_status["firebase_initialized"] = False
+            health_status["firebase_error"] = str(e)
+            health_status["ok"] = False  # Mark as unhealthy if Firebase fails
+    else:
+        health_status["firebase_initialized"] = False
+        health_status["mode"] = "dev"
+    
+    return health_status
 
 @app.get("/me")
 def get_me(current_user: User = Depends(get_current_user)):
