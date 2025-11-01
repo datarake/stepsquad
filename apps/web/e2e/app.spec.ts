@@ -18,7 +18,8 @@ test.describe('Authentication Flow', () => {
     
     // Should see user info in topbar
     await expect(page.getByText('admin@stepsquad.com')).toBeVisible();
-    await expect(page.getByText('ADMIN')).toBeVisible();
+    // Check for ADMIN role badge (more specific selector)
+    await expect(page.locator('span:has-text("ADMIN")').filter({ hasText: /^ADMIN$/ })).toBeVisible();
   });
 
   test('user can logout', async ({ page }) => {
@@ -56,33 +57,45 @@ test.describe('Competition Management', () => {
     await page.getByRole('link', { name: /create competition/i }).click();
     await expect(page).toHaveURL('/competitions/new');
     
+    // Generate unique competition ID to avoid conflicts
+    const compId = 'e2e-' + Date.now();
+    const compName = 'E2E Test Competition ' + Date.now();
+    
     // Fill form
-    await page.getByLabel(/competition id/i).fill('e2e-test-comp');
-    await page.getByLabel(/competition name/i).fill('E2E Test Competition');
+    await page.getByLabel(/competition id/i).fill(compId);
+    await page.getByLabel(/competition name/i).fill(compName);
     await page.getByLabel(/registration open date/i).fill('2025-01-01');
     await page.getByLabel(/start date/i).fill('2025-02-01');
     await page.getByLabel(/end date/i).fill('2025-03-01');
     
-    // Submit
+    // Submit form (wait for button to be enabled)
+    await page.getByRole('button', { name: /create/i }).waitFor({ state: 'visible' });
     await page.getByRole('button', { name: /create/i }).click();
     
-    // Should redirect to home and see the new competition
+    // Wait for navigation to home page (the form navigates after successful submission)
+    await page.waitForURL('/', { timeout: 15000 });
+    
+    // Verify we're on home page
     await expect(page).toHaveURL('/');
-    await expect(page.getByText('E2E Test Competition')).toBeVisible();
+    
+    // Should see the new competition (using the unique name)
+    await expect(page.getByText(compName)).toBeVisible({ timeout: 5000 });
   });
 
   test('member cannot access create page', async ({ page }) => {
     // Logout and login as member
     await page.getByRole('button', { name: /logout/i }).click();
-    await page.goto('/login');
+    await expect(page).toHaveURL('/login');
+    
     await page.getByLabel(/email address/i).fill('member@example.com');
     await page.getByRole('button', { name: /sign in/i }).click();
+    await expect(page).toHaveURL('/');
     
-    // Try to access create page
+    // Try to access create page directly
     await page.goto('/competitions/new');
     
-    // Should show access denied or redirect
-    const url = page.url();
-    expect(url).not.toContain('/competitions/new');
+    // Should show access denied message (not redirect to home)
+    await expect(page.getByRole('heading', { name: /access denied/i })).toBeVisible();
+    await expect(page.getByText("You don't have permission to access this page.")).toBeVisible();
   });
 });

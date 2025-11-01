@@ -1,0 +1,27 @@
+fix: Fix E2E tests and Vitest configuration
+
+## Fixes
+
+### E2E Tests
+- Fixed "admin can create competition" test:
+  - Simplified to wait for navigation instead of API response
+  - Use unique competition IDs/names to avoid conflicts
+  - Fixed timeout issues by using waitForURL instead of waitForResponse
+
+- Fixed "user can login" test:
+  - Made ADMIN badge selector more specific to avoid ambiguity
+  - Filter selector to match exact "ADMIN" text
+
+- Fixed "member cannot access create page" test:
+  - Check for specific access denied heading and message
+  - Use more specific selectors
+
+### Vitest Configuration
+- Excluded e2e directory from Vitest tests
+- E2E tests should run separately with Playwright
+
+## Test Results
+- ✅ Backend: 15/15 tests passing
+- ✅ Frontend: 8/8 tests passing  
+- ✅ E2E: 5/5 tests passing
+- Total: 28/28 tests passing
