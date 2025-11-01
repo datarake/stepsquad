@@ -22,15 +22,18 @@ jobs:
           service_account_key: ${{ secrets.GCP_SA_KEY }}
           project_id: ${{ secrets.GCP_PROJECT_ID }}
       
+      - name: Set project
+        run: |
+          gcloud config set project ${{ secrets.GCP_PROJECT_ID }}
+      
       - name: Build API Image
         run: |
           cd apps/api
-          gcloud builds submit --project=${{ secrets.GCP_PROJECT_ID }} --tag gcr.io/${{ secrets.GCP_PROJECT_ID }}/stepsquad-api:${{ github.sha }}
+          gcloud builds submit --tag gcr.io/${{ secrets.GCP_PROJECT_ID }}/stepsquad-api:${{ github.sha }}
       
       - name: Deploy to Cloud Run
         run: |
           gcloud run deploy stepsquad-api \
-            --project=${{ secrets.GCP_PROJECT_ID }} \
             --image gcr.io/${{ secrets.GCP_PROJECT_ID }}/stepsquad-api:${{ github.sha }} \
             --platform managed \
             --region ${{ env.REGION }} \
@@ -53,10 +56,14 @@ jobs:
           service_account_key: ${{ secrets.GCP_SA_KEY }}
           project_id: ${{ secrets.GCP_PROJECT_ID }}
       
+      - name: Set project
+        run: |
+          gcloud config set project ${{ secrets.GCP_PROJECT_ID }}
+      
       - name: Get API URL
         id: get-api-url
         run: |
-          API_URL=$(gcloud run services describe stepsquad-api --project=${{ secrets.GCP_PROJECT_ID }} --region ${{ env.REGION }} --format 'value(status.url)')
+          API_URL=$(gcloud run services describe stepsquad-api --region ${{ env.REGION }} --format 'value(status.url)')
           echo "api_url=$API_URL" >> $GITHUB_OUTPUT
       
       - name: Build Web Image
@@ -68,12 +75,11 @@ jobs:
           # Create .env.production with build-time variables
           echo "VITE_API_BASE_URL=${{ steps.get-api-url.outputs.api_url }}" > .env.production
           echo "VITE_USE_DEV_AUTH=false" >> .env.production
-          gcloud builds submit --project=${{ secrets.GCP_PROJECT_ID }} --tag gcr.io/${{ secrets.GCP_PROJECT_ID }}/stepsquad-web:${{ github.sha }}
+          gcloud builds submit --tag gcr.io/${{ secrets.GCP_PROJECT_ID }}/stepsquad-web:${{ github.sha }}
       
       - name: Deploy to Cloud Run
         run: |
           gcloud run deploy stepsquad-web \
-            --project=${{ secrets.GCP_PROJECT_ID }} \
             --image gcr.io/${{ secrets.GCP_PROJECT_ID }}/stepsquad-web:${{ github.sha }} \
             --platform managed \
             --region ${{ env.REGION }} \
@@ -88,11 +94,20 @@ jobs:
     needs: [deploy-api, deploy-web]
     
     steps:
+      - uses: google-github-actions/setup-gcloud@v1
+        with:
+          service_account_key: ${{ secrets.GCP_SA_KEY }}
+          project_id: ${{ secrets.GCP_PROJECT_ID }}
+      
+      - name: Set project
+        run: |
+          gcloud config set project ${{ secrets.GCP_PROJECT_ID }}
+      
       - name: Get URLs
         id: get-urls
         run: |
-          API_URL=$(gcloud run services describe stepsquad-api --project=${{ secrets.GCP_PROJECT_ID }} --region ${{ env.REGION }} --format 'value(status.url)')
-          WEB_URL=$(gcloud run services describe stepsquad-web --project=${{ secrets.GCP_PROJECT_ID }} --region ${{ env.REGION }} --format 'value(status.url)')
+          API_URL=$(gcloud run services describe stepsquad-api --region ${{ env.REGION }} --format 'value(status.url)')
+          WEB_URL=$(gcloud run services describe stepsquad-web --region ${{ env.REGION }} --format 'value(status.url)')
           echo "api_url=$API_URL" >> $GITHUB_OUTPUT
           echo "web_url=$WEB_URL" >> $GITHUB_OUTPUT
       
