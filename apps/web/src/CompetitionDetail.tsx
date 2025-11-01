@@ -1,10 +1,13 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Calendar, Users, Settings, Archive, ArrowLeft } from 'lucide-react';
-import { Competition, Status } from './types';
+import { Calendar, Users, Settings, Archive, ArrowLeft, Plus } from 'lucide-react';
+import { Competition, Status, Team, TeamCreateRequest } from './types';
 import { useAuth } from './auth';
 import { apiClient } from './api';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
+import { TeamList } from './TeamList';
+import { TeamCreateForm } from './TeamCreateForm';
 
 interface CompetitionDetailProps {
   competition: Competition;
@@ -27,8 +30,57 @@ const statusLabels: Record<Status, string> = {
 };
 
 export function CompetitionDetail({ competition }: CompetitionDetailProps) {
-  const { isAdmin } = useAuth();
+  const { isAdmin, user } = useAuth();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const [showCreateForm, setShowCreateForm] = useState(false);
+
+  // Fetch teams for this competition
+  const { data: teamsData, isLoading: teamsLoading } = useQuery({
+    queryKey: ['competition-teams', competition.comp_id],
+    queryFn: () => apiClient.getCompetitionTeams(competition.comp_id),
+    enabled: !!competition.comp_id,
+    retry: 1,
+  });
+
+  const teams = teamsData?.rows || [];
+
+  // Create team mutation
+  const createTeamMutation = useMutation({
+    mutationFn: (data: TeamCreateRequest) => apiClient.createTeam(data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['competition-teams', competition.comp_id] });
+      toast.success('Team created successfully');
+      setShowCreateForm(false);
+    },
+    onError: (error: Error) => {
+      toast.error(error.message || 'Failed to create team');
+    },
+  });
+
+  // Join team mutation
+  const joinTeamMutation = useMutation({
+    mutationFn: (teamId: string) => apiClient.joinTeam({ team_id: teamId, uid: user!.uid }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['competition-teams', competition.comp_id] });
+      toast.success('Joined team successfully');
+    },
+    onError: (error: Error) => {
+      toast.error(error.message || 'Failed to join team');
+    },
+  });
+
+  // Leave team mutation
+  const leaveTeamMutation = useMutation({
+    mutationFn: (teamId: string) => apiClient.leaveTeam(teamId, user!.uid),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['competition-teams', competition.comp_id] });
+      toast.success('Left team successfully');
+    },
+    onError: (error: Error) => {
+      toast.error(error.message || 'Failed to leave team');
+    },
+  });
 
   const handleArchive = async () => {
     if (!window.confirm('Are you sure you want to archive this competition? This action cannot be undone.')) {
@@ -42,6 +94,25 @@ export function CompetitionDetail({ competition }: CompetitionDetailProps) {
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Failed to archive competition');
     }
+  };
+
+  const canCreateOrJoinTeams = 
+    (competition.status === 'REGISTRATION' || competition.status === 'ACTIVE') &&
+    competition.status !== 'ARCHIVED';
+
+  const handleCreateTeam = async (data: TeamCreateRequest) => {
+    await createTeamMutation.mutateAsync(data);
+  };
+
+  const handleJoinTeam = async (teamId: string) => {
+    await joinTeamMutation.mutateAsync(teamId);
+  };
+
+  const handleLeaveTeam = async (teamId: string) => {
+    if (!window.confirm('Are you sure you want to leave this team?')) {
+      return;
+    }
+    await leaveTeamMutation.mutateAsync(teamId);
   };
 
   return (
@@ -168,6 +239,60 @@ export function CompetitionDetail({ competition }: CompetitionDetailProps) {
           )}
         </div>
       </div>
+
+      {/* Teams Section */}
+      <div className="mt-6 bg-white shadow sm:rounded-lg">
+        <div className="px-4 py-5 sm:p-6">
+          <div className="flex justify-between items-center mb-6">
+            <div>
+              <h2 className="text-xl font-bold text-gray-900">Teams</h2>
+              <p className="mt-1 text-sm text-gray-500">
+                {teams.length} {teams.length === 1 ? 'team' : 'teams'} registered
+              </p>
+            </div>
+            {canCreateOrJoinTeams && user && (
+              <button
+                onClick={() => setShowCreateForm(true)}
+                disabled={teams.length >= competition.max_teams}
+                className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <Plus className="h-4 w-4 mr-2" />
+                Create Team
+              </button>
+            )}
+          </div>
+
+          {teamsLoading ? (
+            <div className="text-center py-8">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
+              <p className="mt-2 text-sm text-gray-500">Loading teams...</p>
+            </div>
+          ) : (
+            <TeamList
+              teams={teams}
+              competition={{
+                max_members_per_team: competition.max_members_per_team,
+                status: competition.status,
+              }}
+              currentUserUid={user?.uid || ''}
+              onJoinTeam={handleJoinTeam}
+              onLeaveTeam={handleLeaveTeam}
+            />
+          )}
+        </div>
+      </div>
+
+      {/* Create Team Modal */}
+      {showCreateForm && user && (
+        <TeamCreateForm
+          compId={competition.comp_id}
+          ownerUid={user.uid}
+          maxTeams={competition.max_teams}
+          currentTeamCount={teams.length}
+          onSubmit={handleCreateTeam}
+          onCancel={() => setShowCreateForm(false)}
+        />
+      )}
     </div>
   );
 }

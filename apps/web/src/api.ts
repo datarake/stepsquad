@@ -1,4 +1,4 @@
-import { User, Competition, CompetitionCreateRequest, CompetitionUpdateRequest, ApiError } from './types';
+import { User, Competition, CompetitionCreateRequest, CompetitionUpdateRequest, ApiError, Team, TeamCreateRequest, TeamJoinRequest } from './types';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080';
 const USE_DEV_AUTH = import.meta.env.VITE_USE_DEV_AUTH === 'true';
@@ -166,6 +166,52 @@ class ApiClient {
   async deleteCompetition(compId: string): Promise<{ ok: boolean }> {
     const headers = await this.getAuthHeaders();
     const response = await fetch(`${API_BASE_URL}/competitions/${compId}`, {
+      method: 'DELETE',
+      headers,
+    });
+    return this.handleResponse(response);
+  }
+
+  // Team Management
+  async getCompetitionTeams(compId: string): Promise<{ rows: Team[] }> {
+    const headers = await this.getAuthHeaders();
+    const response = await fetch(`${API_BASE_URL}/competitions/${compId}/teams`, {
+      headers,
+    });
+    return this.handleResponse(response);
+  }
+
+  async getTeam(teamId: string): Promise<Team> {
+    const headers = await this.getAuthHeaders();
+    const response = await fetch(`${API_BASE_URL}/teams/${teamId}`, {
+      headers,
+    });
+    return this.handleResponse(response);
+  }
+
+  async createTeam(data: TeamCreateRequest): Promise<{ team_id: string; name: string; comp_id: string }> {
+    const headers = await this.getAuthHeaders();
+    const response = await fetch(`${API_BASE_URL}/teams`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(data),
+    });
+    return this.handleResponse(response);
+  }
+
+  async joinTeam(data: TeamJoinRequest): Promise<{ ok: boolean; team_id: string }> {
+    const headers = await this.getAuthHeaders();
+    const response = await fetch(`${API_BASE_URL}/teams/join`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(data),
+    });
+    return this.handleResponse(response);
+  }
+
+  async leaveTeam(teamId: string, uid: string): Promise<{ ok: boolean }> {
+    const headers = await this.getAuthHeaders();
+    const response = await fetch(`${API_BASE_URL}/teams/${teamId}/members/${uid}`, {
       method: 'DELETE',
       headers,
     });

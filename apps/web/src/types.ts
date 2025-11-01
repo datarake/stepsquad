@@ -49,3 +49,22 @@ export interface CompetitionUpdateRequest {
   max_members_per_team?: number;
   status?: Status;
 }
+
+export interface Team {
+  team_id: string;
+  name: string;
+  comp_id: string;
+  owner_uid: string;
+  members: string[];
+}
+
+export interface TeamCreateRequest {
+  name: string;
+  comp_id: string;
+  owner_uid: string;
+}
+
+export interface TeamJoinRequest {
+  team_id: string;
+  uid: string;
+}

@@ -7,9 +7,9 @@ from typing import Optional, Literal
 
 from gcp_clients import init_clients
 from storage import (
-    upsert_user, create_team, join_team, create_competition,
+    upsert_user, create_team, join_team, leave_team, create_competition,
     write_daily_steps, individual_leaderboard, team_leaderboard,
-    get_user, get_competition, get_competitions, update_competition, delete_competition
+    get_user, get_all_users, get_team, get_teams, get_competition, get_competitions, update_competition, delete_competition
 )
 from pubsub_bus import publish_ingest
 from firebase_auth import verify_id_token, get_user_info_from_token
@@ -38,7 +38,8 @@ class StepIngest(BaseModel):
     idempotency_key: str           # client-generated to dedupe
 
 class TeamCreate(BaseModel):
-    name: str
+    name: str = Field(min_length=1, max_length=50)
+    comp_id: str
     owner_uid: str
 
 class TeamJoin(BaseModel):
@@ -294,15 +295,136 @@ def leaderboard_individual(date: str | None = None):
 def leaderboard_team(date: str | None = None):
     return {"rows": team_leaderboard(date)}
 
+@app.get("/competitions/{comp_id}/teams")
+def get_competition_teams(comp_id: str, current_user: User = Depends(get_current_user)):
+    """Get all teams for a competition"""
+    # Verify competition exists
+    competition = get_competition(comp_id)
+    if not competition:
+        raise HTTPException(status_code=404, detail="Competition not found")
+    
+    teams = get_teams(comp_id=comp_id)
+    return {"rows": teams}
+
+@app.get("/teams/{team_id}")
+def get_team_detail(team_id: str, current_user: User = Depends(get_current_user)):
+    """Get team details with members"""
+    team = get_team(team_id)
+    if not team:
+        raise HTTPException(status_code=404, detail="Team not found")
+    
+    return team
+
 @app.post("/teams")
-def api_create_team(body: TeamCreate):
+def api_create_team(body: TeamCreate, current_user: User = Depends(get_current_user)):
+    """Create a team for a competition"""
+    # Verify competition exists
+    competition = get_competition(body.comp_id)
+    if not competition:
+        raise HTTPException(status_code=404, detail="Competition not found")
+    
+    # Check if competition is in registration or active phase
+    status = competition.get("status", "").upper()
+    if status not in ["REGISTRATION", "ACTIVE"]:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Cannot create teams for competition with status {status}. Competition must be in REGISTRATION or ACTIVE status."
+        )
+    
+    # Check if max teams reached
+    existing_teams = get_teams(comp_id=body.comp_id)
+    max_teams = competition.get("max_teams", 500)
+    if len(existing_teams) >= max_teams:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Maximum number of teams ({max_teams}) reached for this competition"
+        )
+    
+    # Verify owner is authenticated user
+    if body.owner_uid != current_user.uid:
+        raise HTTPException(status_code=403, detail="Cannot create team for another user")
+    
+    # Create team
     team_id = uuid.uuid4().hex[:8]
-    create_team(team_id, body.name, body.owner_uid)
-    return {"team_id": team_id, "name": body.name}
+    create_team(team_id, body.name, body.owner_uid, body.comp_id)
+    
+    logging.info(f"User {current_user.email} created team {team_id} for competition {body.comp_id}")
+    
+    return {"team_id": team_id, "name": body.name, "comp_id": body.comp_id}
 
 @app.post("/teams/join")
-def api_join_team(body: TeamJoin):
+def api_join_team(body: TeamJoin, current_user: User = Depends(get_current_user)):
+    """Join an existing team"""
+    # Get team details
+    team = get_team(body.team_id)
+    if not team:
+        raise HTTPException(status_code=404, detail="Team not found")
+    
+    # Verify user is joining their own team (or allow if not)
+    if body.uid != current_user.uid:
+        raise HTTPException(status_code=403, detail="Cannot join team for another user")
+    
+    # Check if user is already a member
+    if body.uid in team.get("members", []):
+        raise HTTPException(status_code=409, detail="User is already a member of this team")
+    
+    # Get competition to check limits
+    comp_id = team.get("comp_id")
+    if comp_id:
+        competition = get_competition(comp_id)
+        if competition:
+            max_members = competition.get("max_members_per_team", 200)
+            if len(team.get("members", [])) >= max_members:
+                raise HTTPException(
+                    status_code=409,
+                    detail=f"Team is full. Maximum {max_members} members allowed."
+                )
+            
+            # Check competition status
+            status = competition.get("status", "").upper()
+            if status not in ["REGISTRATION", "ACTIVE"]:
+                raise HTTPException(
+                    status_code=422,
+                    detail=f"Cannot join teams for competition with status {status}. Competition must be in REGISTRATION or ACTIVE status."
+                )
+    
+    # Join team
     join_team(body.team_id, body.uid)
+    
+    logging.info(f"User {current_user.email} joined team {body.team_id}")
+    
+    return {"ok": True, "team_id": body.team_id}
+
+@app.delete("/teams/{team_id}/members/{uid}")
+def api_leave_team(team_id: str, uid: str, current_user: User = Depends(get_current_user)):
+    """Leave a team (remove member)"""
+    # Verify user can only leave their own team
+    if uid != current_user.uid:
+        raise HTTPException(status_code=403, detail="Cannot remove another user from team")
+    
+    # Get team details
+    team = get_team(team_id)
+    if not team:
+        raise HTTPException(status_code=404, detail="Team not found")
+    
+    # Check if user is a member
+    if uid not in team.get("members", []):
+        raise HTTPException(status_code=404, detail="User is not a member of this team")
+    
+    # Cannot leave if user is the owner (optional - you might want to allow this)
+    if team.get("owner_uid") == uid and len(team.get("members", [])) > 1:
+        raise HTTPException(
+            status_code=422,
+            detail="Team owner cannot leave. Transfer ownership or delete team first."
+        )
+    
+    # Leave team
+    success = leave_team(team_id, uid)
+    if not success:
+        raise HTTPException(status_code=404, detail="User is not a member of this team")
+    
+    logging.info(f"User {current_user.email} left team {team_id}")
+    
     return {"ok": True}
 
 @app.post("/competitions")
