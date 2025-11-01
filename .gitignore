@@ -83,6 +83,24 @@ Thumbs.db
 firestore-debug.log
 ui-debug.log
 
+# Terraform (if used)
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+*.tfplan
+.terraform.lock.hcl
+
+# Infrastructure
+infra/**/.terraform/
+infra/**/*.tfstate
+infra/**/*.tfstate.*
+infra/**/*.tfvars
+
+# Docker
+docker-compose.override.yml
+*.dockerignore.local
+
 # Backup files
 *.orig
 *~
