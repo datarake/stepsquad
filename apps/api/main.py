@@ -1,14 +1,15 @@
 from fastapi import FastAPI, HTTPException, Depends, Header
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field, validator
-from datetime import datetime
+from datetime import datetime, timedelta
 import os, uuid, logging
 from typing import Optional, Literal
 
 from gcp_clients import init_clients
 from storage import (
     upsert_user, create_team, join_team, leave_team, create_competition,
-    write_daily_steps, individual_leaderboard, team_leaderboard,
+    write_daily_steps, get_user_steps, check_idempotency, is_user_in_team_for_competition,
+    individual_leaderboard, team_leaderboard,
     get_user, get_all_users, get_team, get_teams, get_competition, get_competitions, update_competition, delete_competition
 )
 from pubsub_bus import publish_ingest
@@ -29,13 +30,13 @@ COMP_TZ = os.getenv("COMP_TZ", "Europe/Bucharest")
 GRACE_DAYS = int(os.getenv("GRACE_DAYS", "2"))
 
 class StepIngest(BaseModel):
-    user_id: str
+    comp_id: str                   # Competition ID (required)
     date: str                      # YYYY-MM-DD in competition TZ
-    steps: int = Field(ge=0)
-    provider: str                  # e.g., "garmin", "fitbit", "healthkit"
-    tz: str                        # client tz (IANA), for traceability
-    source_ts: str                 # ISO8601 from device sync time
-    idempotency_key: str           # client-generated to dedupe
+    steps: int = Field(ge=0, le=100000)  # Max 100k steps per day (reasonable limit)
+    provider: str = "manual"        # e.g., "garmin", "fitbit", "healthkit", "manual"
+    tz: str = COMP_TZ              # client tz (IANA), for traceability
+    source_ts: Optional[str] = None # ISO8601 from device sync time (optional for manual)
+    idempotency_key: Optional[str] = None  # client-generated to dedupe (optional)
 
 class TeamCreate(BaseModel):
     name: str = Field(min_length=1, max_length=50)
@@ -282,10 +283,112 @@ def get_competition_detail(comp_id: str, current_user: User = Depends(get_curren
     return competition
 
 @app.post("/ingest/steps")
-def ingest_steps(e: StepIngest):
-    write_daily_steps(e.user_id, e.date, e.steps)
-    publish_ingest(e.model_dump())
-    return {"status": "queued", "stored": True}
+def ingest_steps(e: StepIngest, current_user: User = Depends(get_current_user)):
+    """
+    Submit step data for a competition.
+    
+    Validation:
+    - User must be authenticated
+    - User must be in a team for the competition
+    - Competition must exist and be ACTIVE
+    - Date must be within competition date range (with grace days)
+    - Steps must be between 0 and 100,000
+    - Idempotency key must be unique (if provided)
+    """
+    uid = current_user.uid
+    
+    # Validate competition exists
+    competition = get_competition(e.comp_id)
+    if not competition:
+        raise HTTPException(status_code=404, detail="Competition not found")
+    
+    # Validate competition status
+    if competition.get("status") != "ACTIVE":
+        raise HTTPException(
+            status_code=400,
+            detail=f"Step submission only allowed for ACTIVE competitions. Current status: {competition.get('status')}"
+        )
+    
+    # Validate user is in a team for this competition
+    if not is_user_in_team_for_competition(uid, e.comp_id):
+        raise HTTPException(
+            status_code=403,
+            detail="You must be a member of a team in this competition to submit steps"
+        )
+    
+    # Validate date is within competition date range (with grace days)
+    try:
+        step_date = datetime.strptime(e.date, "%Y-%m-%d").date()
+        start_date = datetime.strptime(competition.get("start_date"), "%Y-%m-%d").date()
+        end_date = datetime.strptime(competition.get("end_date"), "%Y-%m-%d").date()
+        grace_end_date = end_date + timedelta(days=GRACE_DAYS)
+        
+        if step_date < start_date:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Date {e.date} is before competition start date {competition.get('start_date')}"
+            )
+        if step_date > grace_end_date:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Date {e.date} is after competition end date + grace period ({grace_end_date.isoformat()})"
+            )
+    except ValueError as ve:
+        raise HTTPException(status_code=400, detail=f"Invalid date format: {e.date}. Expected YYYY-MM-DD")
+    
+    # Validate step count
+    if e.steps < 0:
+        raise HTTPException(status_code=400, detail="Step count cannot be negative")
+    if e.steps > 100000:
+        raise HTTPException(status_code=400, detail="Step count exceeds maximum allowed (100,000 steps per day)")
+    
+    # Check idempotency if key provided
+    if e.idempotency_key:
+        if check_idempotency(e.idempotency_key, uid, e.date):
+            raise HTTPException(
+                status_code=409,
+                detail="Duplicate submission detected. This idempotency key has already been used."
+            )
+    
+    # Store the steps
+    write_daily_steps(uid, e.date, e.steps)
+    
+    # Publish to Pub/Sub for async processing
+    try:
+        publish_ingest({
+            "user_id": uid,
+            "comp_id": e.comp_id,
+            "date": e.date,
+            "steps": e.steps,
+            "provider": e.provider,
+            "tz": e.tz,
+            "source_ts": e.source_ts,
+            "idempotency_key": e.idempotency_key,
+        })
+    except Exception as pubsub_error:
+        # Log error but don't fail the request since steps are already stored
+        logging.warning(f"Failed to publish step ingestion event to Pub/Sub: {pubsub_error}")
+    
+    logging.info(f"User {current_user.email} submitted {e.steps} steps for competition {e.comp_id} on {e.date}")
+    
+    return {
+        "status": "success",
+        "stored": True,
+        "user_id": uid,
+        "comp_id": e.comp_id,
+        "date": e.date,
+        "steps": e.steps
+    }
+
+@app.get("/users/{uid}/steps")
+def get_user_step_history(uid: str, comp_id: str | None = None, current_user: User = Depends(get_current_user)):
+    """Get step history for a user (own steps or admin viewing other users)"""
+    # Users can only view their own steps, unless they're admin
+    if uid != current_user.uid and current_user.role != "ADMIN":
+        raise HTTPException(status_code=403, detail="You can only view your own step history")
+    
+    steps = get_user_steps(uid, comp_id)
+    return {"rows": steps}
 
 @app.get("/leaderboard/individual")
 def leaderboard_individual(date: str | None = None):

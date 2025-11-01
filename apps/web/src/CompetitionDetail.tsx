@@ -1,13 +1,15 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Calendar, Users, Settings, Archive, ArrowLeft, Plus } from 'lucide-react';
-import { Competition, Status, Team, TeamCreateRequest } from './types';
+import { Calendar, Users, Settings, Archive, ArrowLeft, Plus, Activity } from 'lucide-react';
+import { Competition, Status, Team, TeamCreateRequest, StepIngestRequest } from './types';
 import { useAuth } from './auth';
 import { apiClient } from './api';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import { TeamList } from './TeamList';
 import { TeamCreateForm } from './TeamCreateForm';
+import { StepEntryForm } from './StepEntryForm';
+import { StepHistory } from './StepHistory';
 
 interface CompetitionDetailProps {
   competition: Competition;
@@ -34,6 +36,7 @@ export function CompetitionDetail({ competition }: CompetitionDetailProps) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [showCreateForm, setShowCreateForm] = useState(false);
+  const [showStepEntryForm, setShowStepEntryForm] = useState(false);
 
   // Fetch teams for this competition
   const { data: teamsData, isLoading: teamsLoading } = useQuery({
@@ -113,6 +116,37 @@ export function CompetitionDetail({ competition }: CompetitionDetailProps) {
       return;
     }
     await leaveTeamMutation.mutateAsync(teamId);
+  };
+
+  // Check if user is in a team for this competition
+  const isUserInTeam = user ? teams.some(team => team.members.includes(user.uid)) : false;
+
+  // Fetch step history for current user
+  const { data: stepHistoryData, isLoading: stepsLoading } = useQuery({
+    queryKey: ['user-steps', user?.uid, competition.comp_id],
+    queryFn: () => apiClient.getUserStepHistory(user!.uid, competition.comp_id),
+    enabled: !!user && !!competition.comp_id && isUserInTeam,
+    retry: 1,
+  });
+
+  const steps = stepHistoryData?.rows || [];
+
+  // Submit steps mutation
+  const submitStepsMutation = useMutation({
+    mutationFn: (data: StepIngestRequest) => apiClient.submitSteps(data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['user-steps', user?.uid, competition.comp_id] });
+      queryClient.invalidateQueries({ queryKey: ['competition-teams', competition.comp_id] });
+      toast.success('Steps submitted successfully');
+      setShowStepEntryForm(false);
+    },
+    onError: (error: Error) => {
+      toast.error(error.message || 'Failed to submit steps');
+    },
+  });
+
+  const handleSubmitSteps = async (data: StepIngestRequest) => {
+    await submitStepsMutation.mutateAsync(data);
   };
 
   return (
@@ -292,6 +326,52 @@ export function CompetitionDetail({ competition }: CompetitionDetailProps) {
           onSubmit={handleCreateTeam}
           onCancel={() => setShowCreateForm(false)}
         />
+      )}
+
+      {/* Steps Section - Only show if user is in a team */}
+      {isUserInTeam && user && (
+        <>
+          <div className="mt-6 bg-white shadow sm:rounded-lg">
+            <div className="px-4 py-5 sm:p-6">
+              <div className="flex justify-between items-center mb-6">
+                <div>
+                  <h2 className="text-xl font-bold text-gray-900 flex items-center">
+                    <Activity className="h-5 w-5 mr-2" />
+                    My Steps
+                  </h2>
+                  <p className="mt-1 text-sm text-gray-500">
+                    Track and submit your daily step count
+                  </p>
+                </div>
+                {competition.status === 'ACTIVE' && (
+                  <button
+                    onClick={() => setShowStepEntryForm(true)}
+                    className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
+                  >
+                    <Plus className="h-4 w-4 mr-2" />
+                    Submit Steps
+                  </button>
+                )}
+              </div>
+
+              <StepHistory steps={steps} isLoading={stepsLoading} />
+            </div>
+          </div>
+
+          {/* Step Entry Modal */}
+          {showStepEntryForm && user && (
+            <StepEntryForm
+              compId={competition.comp_id}
+              competition={{
+                start_date: competition.start_date,
+                end_date: competition.end_date,
+                status: competition.status,
+              }}
+              onSubmit={handleSubmitSteps}
+              onCancel={() => setShowStepEntryForm(false)}
+            />
+          )}
+        </>
       )}
     </div>
   );

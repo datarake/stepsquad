@@ -761,3 +761,354 @@ def test_leave_team_wrong_user(client, admin_headers, member_headers):
     # Admin tries to remove member (should fail - can only remove themselves)
     response = client.delete(f"/teams/{team_id}/members/{uid}", headers=admin_headers)
     assert response.status_code == 403
+
+
+# Step Ingestion Tests
+def test_submit_steps_success(client, admin_headers, member_headers):
+    """Test successful step submission"""
+    # Create ACTIVE competition
+    comp_data = {
+        "comp_id": "test-steps-001",
+        "name": "Steps Competition",
+        "registration_open_date": "2025-01-01",
+        "start_date": "2025-02-01",
+        "end_date": "2025-03-01",
+        "max_teams": 10,
+        "max_members_per_team": 5,
+        "status": "ACTIVE"
+    }
+    client.post("/competitions", json=comp_data, headers=admin_headers)
+    
+    # Get user uid
+    me_response = client.get("/me", headers=member_headers)
+    user_data = me_response.json()
+    uid = user_data["uid"]
+    
+    # Create a team
+    team_data = {
+        "name": "Steps Team",
+        "comp_id": "test-steps-001",
+        "owner_uid": uid
+    }
+    client.post("/teams", json=team_data, headers=member_headers)
+    
+    # Submit steps
+    step_data = {
+        "comp_id": "test-steps-001",
+        "date": "2025-02-15",
+        "steps": 10000,
+        "provider": "manual"
+    }
+    response = client.post("/ingest/steps", json=step_data, headers=member_headers)
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "success"
+    assert data["stored"] == True
+    assert data["user_id"] == uid
+    assert data["comp_id"] == "test-steps-001"
+    assert data["steps"] == 10000
+
+def test_submit_steps_requires_auth(client):
+    """Test that step submission requires authentication"""
+    step_data = {
+        "comp_id": "test-steps-001",
+        "date": "2025-02-15",
+        "steps": 10000
+    }
+    response = client.post("/ingest/steps", json=step_data)
+    assert response.status_code == 401
+
+def test_submit_steps_requires_team(client, admin_headers, member_headers):
+    """Test that user must be in a team to submit steps"""
+    # Create ACTIVE competition
+    comp_data = {
+        "comp_id": "test-steps-no-team",
+        "name": "Steps Competition",
+        "registration_open_date": "2025-01-01",
+        "start_date": "2025-02-01",
+        "end_date": "2025-03-01",
+        "max_teams": 10,
+        "max_members_per_team": 5,
+        "status": "ACTIVE"
+    }
+    client.post("/competitions", json=comp_data, headers=admin_headers)
+    
+    # Submit steps without joining a team (should fail)
+    step_data = {
+        "comp_id": "test-steps-no-team",
+        "date": "2025-02-15",
+        "steps": 10000
+    }
+    response = client.post("/ingest/steps", json=step_data, headers=member_headers)
+    assert response.status_code == 403
+    assert "must be a member of a team" in response.json()["detail"]
+
+def test_submit_steps_wrong_status(client, admin_headers, member_headers):
+    """Test that step submission only works for ACTIVE competitions"""
+    # Create REGISTRATION competition
+    comp_data = {
+        "comp_id": "test-steps-registration",
+        "name": "Registration Competition",
+        "registration_open_date": "2025-01-01",
+        "start_date": "2025-02-01",
+        "end_date": "2025-03-01",
+        "max_teams": 10,
+        "max_members_per_team": 5,
+        "status": "REGISTRATION"
+    }
+    client.post("/competitions", json=comp_data, headers=admin_headers)
+    
+    # Get user uid
+    me_response = client.get("/me", headers=member_headers)
+    user_data = me_response.json()
+    uid = user_data["uid"]
+    
+    # Create a team
+    team_data = {
+        "name": "Registration Team",
+        "comp_id": "test-steps-registration",
+        "owner_uid": uid
+    }
+    client.post("/teams", json=team_data, headers=member_headers)
+    
+    # Try to submit steps (should fail)
+    step_data = {
+        "comp_id": "test-steps-registration",
+        "date": "2025-02-15",
+        "steps": 10000
+    }
+    response = client.post("/ingest/steps", json=step_data, headers=member_headers)
+    assert response.status_code == 400
+    assert "ACTIVE" in response.json()["detail"]
+
+def test_submit_steps_date_before_start(client, admin_headers, member_headers):
+    """Test that date must be on or after competition start date"""
+    # Create ACTIVE competition
+    comp_data = {
+        "comp_id": "test-steps-date",
+        "name": "Date Competition",
+        "registration_open_date": "2025-01-01",
+        "start_date": "2025-02-01",
+        "end_date": "2025-03-01",
+        "max_teams": 10,
+        "max_members_per_team": 5,
+        "status": "ACTIVE"
+    }
+    client.post("/competitions", json=comp_data, headers=admin_headers)
+    
+    # Get user uid
+    me_response = client.get("/me", headers=member_headers)
+    user_data = me_response.json()
+    uid = user_data["uid"]
+    
+    # Create a team
+    team_data = {
+        "name": "Date Team",
+        "comp_id": "test-steps-date",
+        "owner_uid": uid
+    }
+    client.post("/teams", json=team_data, headers=member_headers)
+    
+    # Submit steps with date before start (should fail)
+    step_data = {
+        "comp_id": "test-steps-date",
+        "date": "2025-01-15",
+        "steps": 10000
+    }
+    response = client.post("/ingest/steps", json=step_data, headers=member_headers)
+    assert response.status_code == 400
+    assert "before competition start date" in response.json()["detail"]
+
+def test_submit_steps_date_after_end(client, admin_headers, member_headers):
+    """Test that date must be within grace period after end date"""
+    # Create ACTIVE competition
+    comp_data = {
+        "comp_id": "test-steps-date-end",
+        "name": "End Date Competition",
+        "registration_open_date": "2025-01-01",
+        "start_date": "2025-02-01",
+        "end_date": "2025-03-01",
+        "max_teams": 10,
+        "max_members_per_team": 5,
+        "status": "ACTIVE"
+    }
+    client.post("/competitions", json=comp_data, headers=admin_headers)
+    
+    # Get user uid
+    me_response = client.get("/me", headers=member_headers)
+    user_data = me_response.json()
+    uid = user_data["uid"]
+    
+    # Create a team
+    team_data = {
+        "name": "End Date Team",
+        "comp_id": "test-steps-date-end",
+        "owner_uid": uid
+    }
+    client.post("/teams", json=team_data, headers=member_headers)
+    
+    # Submit steps with date too far after end (should fail)
+    step_data = {
+        "comp_id": "test-steps-date-end",
+        "date": "2025-03-10",  # More than 2 days after end
+        "steps": 10000
+    }
+    response = client.post("/ingest/steps", json=step_data, headers=member_headers)
+    assert response.status_code == 400
+    assert "after competition end date" in response.json()["detail"]
+
+def test_submit_steps_invalid_count(client, admin_headers, member_headers):
+    """Test that step count must be within valid range"""
+    # Create ACTIVE competition
+    comp_data = {
+        "comp_id": "test-steps-count",
+        "name": "Count Competition",
+        "registration_open_date": "2025-01-01",
+        "start_date": "2025-02-01",
+        "end_date": "2025-03-01",
+        "max_teams": 10,
+        "max_members_per_team": 5,
+        "status": "ACTIVE"
+    }
+    client.post("/competitions", json=comp_data, headers=admin_headers)
+    
+    # Get user uid
+    me_response = client.get("/me", headers=member_headers)
+    user_data = me_response.json()
+    uid = user_data["uid"]
+    
+    # Create a team
+    team_data = {
+        "name": "Count Team",
+        "comp_id": "test-steps-count",
+        "owner_uid": uid
+    }
+    client.post("/teams", json=team_data, headers=member_headers)
+    
+    # Submit steps with count > 100000 (should fail with 422 - Pydantic validation)
+    step_data = {
+        "comp_id": "test-steps-count",
+        "date": "2025-02-15",
+        "steps": 150000
+    }
+    response = client.post("/ingest/steps", json=step_data, headers=member_headers)
+    # Pydantic validates Field(le=100000) before our endpoint code, so returns 422
+    assert response.status_code == 422
+
+def test_submit_steps_idempotency(client, admin_headers, member_headers):
+    """Test that duplicate idempotency keys are rejected"""
+    # Create ACTIVE competition
+    comp_data = {
+        "comp_id": "test-steps-idempotency",
+        "name": "Idempotency Competition",
+        "registration_open_date": "2025-01-01",
+        "start_date": "2025-02-01",
+        "end_date": "2025-03-01",
+        "max_teams": 10,
+        "max_members_per_team": 5,
+        "status": "ACTIVE"
+    }
+    client.post("/competitions", json=comp_data, headers=admin_headers)
+    
+    # Get user uid
+    me_response = client.get("/me", headers=member_headers)
+    user_data = me_response.json()
+    uid = user_data["uid"]
+    
+    # Create a team
+    team_data = {
+        "name": "Idempotency Team",
+        "comp_id": "test-steps-idempotency",
+        "owner_uid": uid
+    }
+    client.post("/teams", json=team_data, headers=member_headers)
+    
+    # Submit steps with idempotency key (should succeed)
+    step_data = {
+        "comp_id": "test-steps-idempotency",
+        "date": "2025-02-15",
+        "steps": 10000,
+        "idempotency_key": "unique-key-123"
+    }
+    response1 = client.post("/ingest/steps", json=step_data, headers=member_headers)
+    assert response1.status_code == 200
+    
+    # Submit same steps with same idempotency key (should fail)
+    response2 = client.post("/ingest/steps", json=step_data, headers=member_headers)
+    assert response2.status_code == 409
+    assert "Duplicate submission" in response2.json()["detail"]
+
+def test_get_user_step_history(client, admin_headers, member_headers):
+    """Test getting user step history"""
+    # Create ACTIVE competition
+    comp_data = {
+        "comp_id": "test-steps-history",
+        "name": "History Competition",
+        "registration_open_date": "2025-01-01",
+        "start_date": "2025-02-01",
+        "end_date": "2025-03-01",
+        "max_teams": 10,
+        "max_members_per_team": 5,
+        "status": "ACTIVE"
+    }
+    client.post("/competitions", json=comp_data, headers=admin_headers)
+    
+    # Get user uid
+    me_response = client.get("/me", headers=member_headers)
+    user_data = me_response.json()
+    uid = user_data["uid"]
+    
+    # Create a team
+    team_data = {
+        "name": "History Team",
+        "comp_id": "test-steps-history",
+        "owner_uid": uid
+    }
+    client.post("/teams", json=team_data, headers=member_headers)
+    
+    # Submit steps
+    step_data = {
+        "comp_id": "test-steps-history",
+        "date": "2025-02-15",
+        "steps": 10000
+    }
+    client.post("/ingest/steps", json=step_data, headers=member_headers)
+    
+    # Get step history
+    response = client.get(f"/users/{uid}/steps", headers=member_headers)
+    assert response.status_code == 200
+    data = response.json()
+    assert "rows" in data
+    assert len(data["rows"]) > 0
+    assert any(entry["date"] == "2025-02-15" and entry["steps"] == 10000 for entry in data["rows"])
+
+def test_get_user_step_history_forbidden(client, admin_headers, member_headers):
+    """Test that users can only view their own step history"""
+    # Get user uids
+    member_me = client.get("/me", headers=member_headers)
+    member_uid = member_me.json()["uid"]
+    
+    admin_me = client.get("/me", headers=admin_headers)
+    admin_uid = admin_me.json()["uid"]
+    
+    # Member tries to view admin's steps (should fail)
+    response = client.get(f"/users/{admin_uid}/steps", headers=member_headers)
+    assert response.status_code == 403
+    assert "own step history" in response.json()["detail"]
+
+def test_get_user_step_history_nonexistent_competition(client, admin_headers, member_headers):
+    """Test submitting steps to nonexistent competition"""
+    # Get user uid
+    me_response = client.get("/me", headers=member_headers)
+    user_data = me_response.json()
+    uid = user_data["uid"]
+    
+    # Submit steps to nonexistent competition (should fail)
+    step_data = {
+        "comp_id": "nonexistent-comp",
+        "date": "2025-02-15",
+        "steps": 10000
+    }
+    response = client.post("/ingest/steps", json=step_data, headers=member_headers)
+    assert response.status_code == 404
+    assert "Competition not found" in response.json()["detail"]

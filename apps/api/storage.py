@@ -9,6 +9,7 @@ TEAMS: Dict[str, dict] = {}
 COMPETITIONS: Dict[str, dict] = {}
 DAILY_STEPS: Dict[Tuple[str, str], int] = {}
 TEAM_MEMBERS: Dict[str, List[str]] = {}
+IDEMPOTENCY_KEYS: Dict[str, str] = {}  # idempotency_key -> date mapping
 def _fs_coll(name: str):
     return fs().collection(name) if fs() else None
 def upsert_user(uid: str, data: dict):
@@ -188,6 +189,56 @@ def write_daily_steps(uid: str, date: str, steps: int):
         if bq():
             table = f"{BQ_DATASET}.fact_daily_steps"
             bq().insert_rows_json(table, [{"user_id": uid, "date": date, "steps": int(new_steps)}])
+
+def get_user_steps(uid: str, comp_id: str | None = None) -> list[dict]:
+    """Get user's step history, optionally filtered by competition"""
+    if GCP_ENABLED and _fs_coll("daily_steps"):
+        query = _fs_coll("daily_steps").where("user_id", "==", uid)
+        docs = query.stream()
+        steps = [{"user_id": doc.to_dict().get("user_id"), "date": doc.to_dict().get("date"), "steps": doc.to_dict().get("steps", 0)} for doc in docs]
+        # Note: Competition filtering would require storing comp_id with steps
+        return sorted(steps, key=lambda x: x.get("date", ""), reverse=True)
+    
+    # Local storage
+    steps = []
+    for (user_id, date), step_count in DAILY_STEPS.items():
+        if user_id == uid:
+            steps.append({"user_id": user_id, "date": date, "steps": step_count})
+    return sorted(steps, key=lambda x: x.get("date", ""), reverse=True)
+
+def check_idempotency(idempotency_key: str, uid: str, date: str) -> bool:
+    """Check if idempotency key has been used before"""
+    if not idempotency_key:
+        return False
+    
+    storage_key = f"{idempotency_key}_{uid}"
+    
+    if GCP_ENABLED and _fs_coll("idempotency_keys"):
+        doc = _fs_coll("idempotency_keys").document(storage_key).get()
+        if doc.exists:
+            return True  # Key already used
+        # Store the key
+        _fs_coll("idempotency_keys").document(storage_key).set({
+            "idempotency_key": idempotency_key,
+            "user_id": uid,
+            "date": date,
+            "created_at": datetime.utcnow().isoformat()
+        })
+        return False
+    
+    # Local storage
+    if storage_key in IDEMPOTENCY_KEYS:
+        return True  # Key already used
+    IDEMPOTENCY_KEYS[storage_key] = date
+    return False
+
+def is_user_in_team_for_competition(uid: str, comp_id: str) -> bool:
+    """Check if user is a member of any team in the competition"""
+    teams = get_teams(comp_id=comp_id)
+    for team in teams:
+        if uid in team.get("members", []):
+            return True
+    return False
 def individual_leaderboard(date: str | None):
     if GCP_ENABLED and _fs_coll("daily_steps") and date:
         qs = _fs_coll("daily_steps").where("date","==",date).stream()

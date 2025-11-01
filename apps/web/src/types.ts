@@ -68,3 +68,32 @@ export interface TeamJoinRequest {
   team_id: string;
   uid: string;
 }
+
+export interface StepIngestRequest {
+  comp_id: string;
+  date: string; // YYYY-MM-DD
+  steps: number;
+  provider?: string; // e.g., "manual", "garmin", "fitbit", "healthkit"
+  tz?: string;
+  source_ts?: string; // ISO8601
+  idempotency_key?: string;
+}
+
+export interface StepEntry {
+  user_id: string;
+  date: string;
+  steps: number;
+}
+
+export interface StepHistoryResponse {
+  rows: StepEntry[];
+}
+
+export interface StepIngestResponse {
+  status: string;
+  stored: boolean;
+  user_id: string;
+  comp_id: string;
+  date: string;
+  steps: number;
+}

@@ -1,4 +1,4 @@
-import { User, Competition, CompetitionCreateRequest, CompetitionUpdateRequest, ApiError, Team, TeamCreateRequest, TeamJoinRequest } from './types';
+import { User, Competition, CompetitionCreateRequest, CompetitionUpdateRequest, ApiError, Team, TeamCreateRequest, TeamJoinRequest, StepIngestRequest, StepIngestResponse, StepHistoryResponse } from './types';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080';
 const USE_DEV_AUTH = import.meta.env.VITE_USE_DEV_AUTH === 'true';
@@ -213,6 +213,28 @@ class ApiClient {
     const headers = await this.getAuthHeaders();
     const response = await fetch(`${API_BASE_URL}/teams/${teamId}/members/${uid}`, {
       method: 'DELETE',
+      headers,
+    });
+    return this.handleResponse(response);
+  }
+
+  // Step Ingestion
+  async submitSteps(data: StepIngestRequest): Promise<StepIngestResponse> {
+    const headers = await this.getAuthHeaders();
+    const response = await fetch(`${API_BASE_URL}/ingest/steps`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(data),
+    });
+    return this.handleResponse(response);
+  }
+
+  async getUserStepHistory(uid: string, compId?: string): Promise<StepHistoryResponse> {
+    const headers = await this.getAuthHeaders();
+    const url = compId 
+      ? `${API_BASE_URL}/users/${uid}/steps?comp_id=${compId}`
+      : `${API_BASE_URL}/users/${uid}/steps`;
+    const response = await fetch(url, {
       headers,
     });
     return this.handleResponse(response);
