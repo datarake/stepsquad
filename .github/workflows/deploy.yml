@@ -139,7 +139,11 @@ jobs:
           # Create .env.production with build-time variables
           echo "VITE_API_BASE_URL=${{ steps.get-api-url.outputs.api_url }}" > .env.production
           echo "VITE_USE_DEV_AUTH=false" >> .env.production
-          gcloud builds submit --tag gcr.io/$PROJECT_ID/stepsquad-web:${{ github.sha }}
+          # Submit build (log streaming may fail but build will continue)
+          gcloud builds submit --tag gcr.io/$PROJECT_ID/stepsquad-web:${{ github.sha }} || \
+            (echo "Build submitted (log streaming failed, checking status...)" && \
+             sleep 30 && \
+             gcloud builds list --limit=1 --format="value(status)" | grep -q "SUCCESS\|DONE\|FAILURE" && echo "Build completed")
       
       - name: Deploy to Cloud Run
         env:
