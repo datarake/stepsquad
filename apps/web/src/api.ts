@@ -44,10 +44,12 @@ class ApiClient {
   private async handleResponse<T>(response: Response): Promise<T> {
     if (!response.ok) {
       if (response.status === 401) {
-        // Redirect to login
-        localStorage.removeItem('devEmail');
-        localStorage.removeItem('firebaseToken');
-        window.location.href = '/login';
+        // Only clear auth and redirect if not already on login page
+        if (!window.location.pathname.includes('/login')) {
+          localStorage.removeItem('devEmail');
+          localStorage.removeItem('firebaseToken');
+          window.location.href = '/login';
+        }
         throw new Error('Unauthorized');
       }
       

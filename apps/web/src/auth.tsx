@@ -70,6 +70,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } catch (error) {
       console.error('Auth check failed:', error);
       setUser(null);
+      // Stop infinite loop: if we're already on login page, don't retry
+      if (window.location.pathname.includes('/login')) {
+        setLoading(false);
+        return;
+      }
     } finally {
       console.log('Auth check complete, setting loading to false');
       setLoading(false);
