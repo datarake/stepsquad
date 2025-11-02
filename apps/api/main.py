@@ -1,7 +1,8 @@
-from fastapi import FastAPI, HTTPException, Depends, Header
+from fastapi import FastAPI, HTTPException, Depends, Header, Query
+from fastapi.responses import RedirectResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field, validator
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date as date_type
 import os, uuid, logging
 from typing import Optional, Literal
 
@@ -14,6 +15,24 @@ from storage import (
 )
 from pubsub_bus import publish_ingest
 from firebase_auth import verify_id_token, get_user_info_from_token
+from device_storage import (
+    store_device_tokens, get_device_tokens, get_user_devices,
+    remove_device_tokens, update_device_sync_time
+)
+from garmin_client import (
+    generate_state_token,
+    build_garmin_oauth_url,
+    exchange_garmin_code,
+    get_garmin_daily_steps,
+    refresh_garmin_token
+)
+from fitbit_client import (
+    generate_state_token as fitbit_generate_state_token,
+    build_fitbit_oauth_url,
+    exchange_fitbit_code,
+    get_fitbit_daily_steps,
+    refresh_fitbit_token
+)
 
 app = FastAPI(title="StepSquad API", version="0.5.0")
 init_clients()
@@ -724,6 +743,354 @@ def api_delete_competition(comp_id: str, current_user: User = Depends(get_curren
     logging.info(f"Admin {current_user.email} archived competition {comp_id}: {competition.get('name')}")
     
     return {"ok": True}
+
+
+# ============================================================================
+# OAuth Device Integration Endpoints
+# ============================================================================
+
+@app.get("/oauth/garmin/authorize")
+async def garmin_authorize(current_user: User = Depends(get_current_user)):
+    """
+    Initiate Garmin OAuth flow
+    
+    Returns authorization URL for user to redirect to Garmin
+    """
+    try:
+        # Generate state token for CSRF protection
+        state = generate_state_token(current_user.uid)
+        
+        # Build OAuth authorization URL
+        authorization_url = build_garmin_oauth_url(state)
+        
+        return {
+            "authorization_url": authorization_url,
+            "state": state,
+            "provider": "garmin"
+        }
+    
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logging.error(f"Error initiating Garmin OAuth: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to initiate Garmin OAuth")
+
+
+@app.get("/oauth/garmin/callback")
+async def garmin_callback(
+    code: Optional[str] = Query(None),
+    state: Optional[str] = Query(None),
+    oauth_token: Optional[str] = Query(None),  # OAuth 1.0a request token
+    oauth_verifier: Optional[str] = Query(None),  # OAuth 1.0a verifier
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Handle Garmin OAuth callback
+    
+    Garmin uses OAuth 1.0a, which has a different flow:
+    1. Request token → 2. Authorization → 3. Access token
+    
+    This endpoint handles step 2 (authorization) and 3 (access token)
+    """
+    try:
+        if not state:
+            raise HTTPException(status_code=400, detail="State parameter required")
+        
+        # Exchange authorization for access token
+        # Garmin uses OAuth 1.0a, so we need oauth_token and oauth_verifier
+        if oauth_token and oauth_verifier:
+            # Exchange request token for access token
+            tokens = exchange_garmin_code(oauth_verifier, oauth_token)
+        elif code:
+            # If using OAuth 2.0 (newer Garmin API)
+            tokens = exchange_garmin_code(code)
+        else:
+            raise HTTPException(status_code=400, detail="OAuth parameters missing")
+        
+        # Store tokens for user
+        store_device_tokens(current_user.uid, "garmin", tokens)
+        
+        logging.info(f"User {current_user.email} linked Garmin device")
+        
+        return {
+            "status": "success",
+            "provider": "garmin",
+            "message": "Garmin device linked successfully"
+        }
+    
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logging.error(f"Error in Garmin OAuth callback: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to complete Garmin OAuth")
+
+
+@app.get("/oauth/fitbit/authorize")
+async def fitbit_authorize(current_user: User = Depends(get_current_user)):
+    """
+    Initiate Fitbit OAuth 2.0 flow
+    
+    Returns authorization URL for user to redirect to Fitbit
+    """
+    try:
+        # Generate state token for CSRF protection
+        state = fitbit_generate_state_token(current_user.uid)
+        
+        # Build OAuth authorization URL
+        authorization_url = build_fitbit_oauth_url(state)
+        
+        return {
+            "authorization_url": authorization_url,
+            "state": state,
+            "provider": "fitbit"
+        }
+    
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logging.error(f"Error initiating Fitbit OAuth: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to initiate Fitbit OAuth")
+
+
+@app.get("/oauth/fitbit/callback")
+async def fitbit_callback(
+    code: Optional[str] = Query(None),
+    state: Optional[str] = Query(None),
+    error: Optional[str] = Query(None),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Handle Fitbit OAuth 2.0 callback
+    
+    Fitbit uses OAuth 2.0 authorization code flow
+    """
+    try:
+        # Check for OAuth errors
+        if error:
+            raise HTTPException(status_code=400, detail=f"Fitbit OAuth error: {error}")
+        
+        if not code:
+            raise HTTPException(status_code=400, detail="Authorization code required")
+        
+        if not state:
+            raise HTTPException(status_code=400, detail="State parameter required")
+        
+        # Exchange authorization code for access token
+        tokens = exchange_fitbit_code(code)
+        
+        # Store tokens for user
+        store_device_tokens(current_user.uid, "fitbit", tokens)
+        
+        logging.info(f"User {current_user.email} linked Fitbit device")
+        
+        return {
+            "status": "success",
+            "provider": "fitbit",
+            "message": "Fitbit device linked successfully"
+        }
+    
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logging.error(f"Error in Fitbit OAuth callback: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to complete Fitbit OAuth")
+
+
+@app.get("/devices")
+async def list_devices(current_user: User = Depends(get_current_user)):
+    """
+    List all linked devices for the current user
+    
+    Returns list of linked devices with sync status
+    """
+    try:
+        devices = get_user_devices(current_user.uid)
+        return {
+            "devices": devices,
+            "count": len(devices)
+        }
+    
+    except Exception as e:
+        logging.error(f"Error listing devices: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to list devices")
+
+
+@app.post("/devices/{provider}/sync")
+async def sync_device(
+    provider: str,
+    date: Optional[str] = Query(None),  # Optional: sync specific date (YYYY-MM-DD)
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Manually trigger device sync for a specific provider
+    
+    Syncs steps from the linked device for today or specified date
+    """
+    if provider not in ["garmin", "fitbit"]:
+        raise HTTPException(status_code=400, detail=f"Invalid provider: {provider}. Supported: garmin, fitbit")
+    
+    try:
+        # Get stored tokens
+        device_data = get_device_tokens(current_user.uid, provider)
+        
+        if not device_data:
+            raise HTTPException(status_code=404, detail=f"{provider.capitalize()} device not linked")
+        
+        tokens = device_data.get("tokens", {})
+        access_token = tokens.get("access_token")
+        
+        if not access_token:
+            raise HTTPException(status_code=400, detail=f"{provider.capitalize()} access token not found")
+        
+        # Determine date to sync
+        if date:
+            try:
+                sync_date = datetime.strptime(date, "%Y-%m-%d").date()
+            except ValueError:
+                raise HTTPException(status_code=400, detail="Invalid date format. Use YYYY-MM-DD")
+        else:
+            sync_date = datetime.now().date()
+        
+        # Fetch steps from device API
+        if provider == "garmin":
+            steps = get_garmin_daily_steps(access_token, sync_date)
+        elif provider == "fitbit":
+            steps = get_fitbit_daily_steps(access_token, sync_date)
+        else:
+            raise HTTPException(status_code=400, detail=f"Unknown provider: {provider}")
+        
+        # Find user's active competitions and sync steps to each
+        # Get all competitions and check if user is in a team
+        all_competitions = get_competitions()
+        user_competitions = []
+        
+        for competition in all_competitions:
+            comp_id = competition.get("comp_id")
+            if not comp_id:
+                continue
+            
+            # Check if competition is ACTIVE
+            if competition.get("status") != "ACTIVE":
+                continue
+            
+            # Check if user is in a team for this competition
+            if not is_user_in_team_for_competition(current_user.uid, comp_id):
+                continue
+            
+            # Check if date is within competition range (with grace days)
+            try:
+                comp_start = datetime.strptime(competition.get("start_date"), "%Y-%m-%d").date()
+                comp_end = datetime.strptime(competition.get("end_date"), "%Y-%m-%d").date()
+                grace_end = comp_end + timedelta(days=GRACE_DAYS)
+                
+                if comp_start <= sync_date <= grace_end:
+                    user_competitions.append(comp_id)
+            except (ValueError, KeyError) as e:
+                logging.warning(f"Error checking date range for competition {comp_id}: {e}")
+                continue
+        
+        # Submit steps to each active competition
+        submissions = []
+        for comp_id in user_competitions:
+            try:
+                # Use existing ingest endpoint logic
+                # Check idempotency
+                idempotency_key = f"{provider}_{sync_date.isoformat()}_{current_user.uid}"
+                if not check_idempotency(idempotency_key, current_user.uid, sync_date.isoformat()):
+                    # Write steps for this competition
+                    write_daily_steps(current_user.uid, sync_date.isoformat(), steps)
+                    
+                    # Publish to Pub/Sub
+                    try:
+                        publish_ingest({
+                            "user_id": current_user.uid,
+                            "comp_id": comp_id,
+                            "date": sync_date.isoformat(),
+                            "steps": steps,
+                            "provider": provider,
+                            "tz": COMP_TZ,
+                            "source_ts": datetime.utcnow().isoformat(),
+                            "idempotency_key": idempotency_key,
+                        })
+                    except Exception as pubsub_error:
+                        logging.warning(f"Failed to publish step ingestion event to Pub/Sub: {pubsub_error}")
+                    
+                    submissions.append({
+                        "comp_id": comp_id,
+                        "status": "submitted",
+                        "steps": steps
+                    })
+            except Exception as e:
+                logging.warning(f"Failed to submit steps to competition {comp_id}: {e}")
+                submissions.append({
+                    "comp_id": comp_id,
+                    "status": "error",
+                    "error": str(e)
+                })
+        
+        # Update sync time
+        update_device_sync_time(current_user.uid, provider)
+        
+        logging.info(f"User {current_user.email} synced {steps} steps from {provider} for {sync_date}, submitted to {len(submissions)} competitions")
+        
+        return {
+            "status": "success",
+            "provider": provider,
+            "date": sync_date.isoformat(),
+            "steps": steps,
+            "competitions": submissions,
+            "submitted_count": len([s for s in submissions if s.get("status") == "submitted"]),
+            "message": f"Synced {steps} steps from {provider} and submitted to {len([s for s in submissions if s.get('status') == 'submitted'])} competition(s)"
+        }
+    
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except HTTPException:
+        raise
+    except Exception as e:
+        logging.error(f"Error syncing {provider} device: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to sync {provider} device: {str(e)}")
+
+
+@app.delete("/devices/{provider}")
+async def unlink_device(
+    provider: str,
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Unlink a device (remove stored OAuth tokens)
+    
+    User can unlink their Garmin or Fitbit device
+    """
+    if provider not in ["garmin", "fitbit"]:
+        raise HTTPException(status_code=400, detail=f"Invalid provider: {provider}. Supported: garmin, fitbit")
+    
+    try:
+        # Check if device is linked
+        device_data = get_device_tokens(current_user.uid, provider)
+        
+        if not device_data:
+            raise HTTPException(status_code=404, detail=f"{provider.capitalize()} device not linked")
+        
+        # Remove tokens
+        removed = remove_device_tokens(current_user.uid, provider)
+        
+        if removed:
+            logging.info(f"User {current_user.email} unlinked {provider} device")
+            return {
+                "status": "success",
+                "provider": provider,
+                "message": f"{provider.capitalize()} device unlinked successfully"
+            }
+        else:
+            raise HTTPException(status_code=500, detail=f"Failed to unlink {provider} device")
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        logging.error(f"Error unlinking {provider} device: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to unlink {provider} device")
+
 
 @app.post("/dev/seed")
 def dev_seed():
