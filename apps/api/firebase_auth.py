@@ -27,8 +27,10 @@ def init_firebase():
     try:
         # Try to use Application Default Credentials (for Cloud Run, GKE, etc.)
         # This will use the service account attached to the environment
-        _firebase_app = firebase_admin.initialize_app()
-        logging.info("Firebase Admin SDK initialized with Application Default Credentials")
+        # Explicitly set project ID to match Firebase project
+        project_id = os.getenv("GOOGLE_CLOUD_PROJECT") or os.getenv("GCP_PROJECT_ID") or "stepsquad-46d14"
+        _firebase_app = firebase_admin.initialize_app(options={'projectId': project_id})
+        logging.info(f"Firebase Admin SDK initialized with Application Default Credentials (project: {project_id})")
     except Exception as e:
         logging.warning(f"Failed to initialize Firebase with ADC: {e}")
         # Fallback: try using explicit credentials file
