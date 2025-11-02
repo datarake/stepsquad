@@ -18,4 +18,4 @@ gcloud run deploy "${SERVICE}" \
   --image "${REGION}-docker.pkg.dev/${PROJECT}/${REPO}/${IMAGE}:latest" \
   --region "${REGION}" --platform managed \
   --no-allow-unauthenticated \
-  --update-env-vars=PORT-
+  --set-env-vars="GCP_ENABLED=true,GOOGLE_CLOUD_PROJECT=${PROJECT}"
