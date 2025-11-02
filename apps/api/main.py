@@ -5,6 +5,14 @@ from pydantic import BaseModel, Field, validator
 from datetime import datetime, timedelta, date as date_type
 import os, uuid, logging
 from typing import Optional, Literal
+from pathlib import Path
+
+# Load environment variables from .env.local file if it exists
+from dotenv import load_dotenv
+env_path = Path(__file__).parent / ".env.local"
+if env_path.exists():
+    load_dotenv(env_path)
+    logging.info(f"Loaded environment variables from {env_path}")
 
 from gcp_clients import init_clients
 from storage import (
