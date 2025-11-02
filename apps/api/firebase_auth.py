@@ -30,20 +30,33 @@ def init_firebase():
         _firebase_app = firebase_admin.initialize_app()
         logging.info("Firebase Admin SDK initialized with Application Default Credentials")
     except Exception as e:
+        logging.warning(f"Failed to initialize Firebase with ADC: {e}")
         # Fallback: try using explicit credentials file
         creds_path = os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
-        if creds_path and os.path.exists(creds_path):
-            try:
-                cred = credentials.Certificate(creds_path)
-                _firebase_app = firebase_admin.initialize_app(cred)
-                logging.info(f"Firebase Admin SDK initialized with credentials from {creds_path}")
-            except Exception as e2:
-                logging.error(f"Failed to initialize Firebase with credentials file: {e2}")
-                raise
+        if creds_path:
+            # Check if it's a file path or secret reference
+            if os.path.exists(creds_path):
+                try:
+                    cred = credentials.Certificate(creds_path)
+                    _firebase_app = firebase_admin.initialize_app(cred)
+                    logging.info(f"Firebase Admin SDK initialized with credentials from {creds_path}")
+                except Exception as e2:
+                    logging.error(f"Failed to initialize Firebase with credentials file: {e2}")
+                    raise
+            else:
+                # Might be a secret reference, try to read from mounted path
+                # In Cloud Run, secrets are mounted as files
+                try:
+                    cred = credentials.Certificate(creds_path)
+                    _firebase_app = firebase_admin.initialize_app(cred)
+                    logging.info(f"Firebase Admin SDK initialized with credentials from {creds_path}")
+                except Exception as e2:
+                    logging.warning(f"Credentials path {creds_path} not found or invalid: {e2}")
         else:
-            logging.warning(f"Firebase Admin SDK initialization failed: {e}")
-            logging.warning("Set GOOGLE_APPLICATION_CREDENTIALS or use Application Default Credentials")
-            raise
+            logging.warning("Firebase Admin SDK initialization failed: No credentials available")
+            logging.warning("Set GOOGLE_APPLICATION_CREDENTIALS or ensure service account has Firebase Admin role")
+            # Don't raise - allow retry on first token verification
+            return None
     
     return _firebase_app
 
@@ -67,11 +80,21 @@ def verify_id_token(id_token: str) -> Dict:
         init_firebase()
     
     if _firebase_app is None:
-        raise ValueError("Firebase Admin SDK not initialized")
+        # Try to initialize again with explicit error handling
+        try:
+            init_firebase()
+        except Exception as e:
+            logging.error(f"Firebase Admin SDK initialization failed during token verification: {e}")
+            raise ValueError(f"Firebase Admin SDK not initialized: {str(e)}")
+    
+    if _firebase_app is None:
+        raise ValueError("Firebase Admin SDK not initialized. Check service account permissions.")
     
     try:
         # Verify the ID token
-        decoded_token = auth.verify_id_token(id_token)
+        # Use check_revoked=False to allow unverified emails
+        decoded_token = auth.verify_id_token(id_token, check_revoked=False)
+        logging.debug(f"Token verified successfully for user: {decoded_token.get('email', 'unknown')}")
         return decoded_token
     except auth.InvalidIdTokenError as e:
         logging.warning(
