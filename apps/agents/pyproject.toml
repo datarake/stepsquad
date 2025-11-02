@@ -7,8 +7,9 @@ dependencies = [
   "uvicorn[standard]>=0.30.0",
   "google-cloud-bigquery>=3.25.0",
   "google-cloud-firestore>=2.16.0",
-  "google-adk>=0.2.0",
   "google-generativeai>=0.8.0",
   "requests>=2.32.3",
   "python-dotenv>=1.0.0"
 ]
+# Note: google-adk may not be available on PyPI yet
+# The code gracefully falls back if ADK is not available

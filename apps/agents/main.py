@@ -108,9 +108,22 @@ def health():
         "ok": True,
         "service": "stepsquad-agents",
         "agents": ["sync", "fairness", "workflow"],
-        "adk_available": ADK_AVAILABLE,
-        "gemini_available": GEMINI_AVAILABLE,
+        "adk_available": ADK_AVAILABLE if 'ADK_AVAILABLE' in globals() else False,
+        "gemini_available": GEMINI_AVAILABLE if 'GEMINI_AVAILABLE' in globals() else False,
         "agents_initialized": sync_agent is not None and fairness_agent is not None,
         "tools_count": len(sync_agent.tools) if sync_agent and sync_agent.tools else 0,
         "version": "0.3.0"
+    }
+
+
+@app.get("/")
+def root():
+    """Root endpoint"""
+    return {
+        "service": "stepsquad-agents",
+        "version": "0.3.0",
+        "endpoints": {
+            "health": "/health",
+            "run": "/run"
+        }
     }
