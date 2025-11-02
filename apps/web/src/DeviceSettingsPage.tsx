@@ -1,0 +1,258 @@
+import React, { useState, useEffect } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { toast } from 'react-hot-toast';
+import { apiClient } from './api';
+import { Device, DeviceSyncResponse } from './types';
+import { Activity, Trash2, RefreshCw, Link2, AlertCircle } from 'lucide-react';
+
+export function DeviceSettingsPage() {
+  const queryClient = useQueryClient();
+  const [syncing, setSyncing] = useState<string | null>(null);
+
+  // Fetch devices
+  const { data: devicesData, isLoading, error, refetch } = useQuery({
+    queryKey: ['devices'],
+    queryFn: () => apiClient.getDevices(),
+  });
+
+  // Unlink device mutation
+  const unlinkMutation = useMutation({
+    mutationFn: (provider: "garmin" | "fitbit") => apiClient.unlinkDevice(provider),
+    onSuccess: (data, provider) => {
+      toast.success(`${provider.charAt(0).toUpperCase() + provider.slice(1)} device unlinked successfully`);
+      queryClient.invalidateQueries({ queryKey: ['devices'] });
+    },
+    onError: (error: Error) => {
+      toast.error(`Failed to unlink device: ${error.message}`);
+    },
+  });
+
+  // Sync device mutation
+  const syncMutation = useMutation({
+    mutationFn: ({ provider, date }: { provider: "garmin" | "fitbit"; date?: string }) =>
+      apiClient.syncDevice(provider, date),
+    onSuccess: (data: DeviceSyncResponse, variables) => {
+      const { provider, steps, submitted_count, message } = data;
+      toast.success(
+        `Synced ${steps} steps from ${provider.charAt(0).toUpperCase() + provider.slice(1)}. ${message}`
+      );
+      queryClient.invalidateQueries({ queryKey: ['devices'] });
+      setSyncing(null);
+    },
+    onError: (error: Error) => {
+      toast.error(`Failed to sync device: ${error.message}`);
+      setSyncing(null);
+    },
+  });
+
+  // Connect device handlers
+  const handleConnectGarmin = async () => {
+    try {
+      const { authorization_url } = await apiClient.getGarminAuthUrl();
+      // Store state in localStorage for callback verification
+      window.localStorage.setItem('oauth_state', 'garmin');
+      // Redirect to Garmin OAuth
+      window.location.href = authorization_url;
+    } catch (error: any) {
+      toast.error(`Failed to connect Garmin: ${error.message}`);
+    }
+  };
+
+  const handleConnectFitbit = async () => {
+    try {
+      const { authorization_url } = await apiClient.getFitbitAuthUrl();
+      // Store state in localStorage for callback verification
+      window.localStorage.setItem('oauth_state', 'fitbit');
+      // Redirect to Fitbit OAuth
+      window.location.href = authorization_url;
+    } catch (error: any) {
+      toast.error(`Failed to connect Fitbit: ${error.message}`);
+    }
+  };
+
+  const handleSync = async (provider: "garmin" | "fitbit") => {
+    setSyncing(provider);
+    syncMutation.mutate({ provider });
+  };
+
+  const handleUnlink = async (provider: "garmin" | "fitbit") => {
+    if (confirm(`Are you sure you want to unlink your ${provider.charAt(0).toUpperCase() + provider.slice(1)} device?`)) {
+      unlinkMutation.mutate(provider);
+    }
+  };
+
+  const devices = devicesData?.devices || [];
+  const linkedProviders = devices.map(d => d.provider);
+
+  if (isLoading) {
+    return (
+      <div className="max-w-4xl mx-auto p-6">
+        <div className="animate-pulse space-y-4">
+          <div className="h-8 bg-gray-200 rounded w-1/3"></div>
+          <div className="h-32 bg-gray-200 rounded"></div>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="max-w-4xl mx-auto p-6">
+        <div className="bg-red-50 border border-red-200 rounded-lg p-4 flex items-center gap-2">
+          <AlertCircle className="h-5 w-5 text-red-600" />
+          <p className="text-red-800">Failed to load devices: {(error as Error).message}</p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="max-w-4xl mx-auto p-6">
+      <div className="mb-6">
+        <h1 className="text-2xl font-bold text-gray-900 mb-2">Device Settings</h1>
+        <p className="text-gray-600">
+          Connect your Garmin or Fitbit device to automatically sync step data to competitions.
+        </p>
+      </div>
+
+      {/* Linked Devices */}
+      {devices.length > 0 && (
+        <div className="mb-6">
+          <h2 className="text-lg font-semibold text-gray-900 mb-4">Connected Devices</h2>
+          <div className="space-y-4">
+            {devices.map((device: Device) => (
+              <div
+                key={device.provider}
+                className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm"
+              >
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-4">
+                    <div className="flex items-center justify-center w-12 h-12 bg-blue-100 rounded-lg">
+                      <Activity className="h-6 w-6 text-blue-600" />
+                    </div>
+                    <div>
+                      <h3 className="font-semibold text-gray-900 capitalize">
+                        {device.provider}
+                      </h3>
+                      <div className="text-sm text-gray-600">
+                        <p>Linked: {new Date(device.linked_at).toLocaleDateString()}</p>
+                        {device.last_sync && (
+                          <p>Last sync: {new Date(device.last_sync).toLocaleString()}</p>
+                        )}
+                        {!device.last_sync && <p className="text-gray-400">Never synced</p>}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => handleSync(device.provider)}
+                      disabled={syncing === device.provider || syncMutation.isPending}
+                      className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                    >
+                      {syncing === device.provider ? (
+                        <>
+                          <RefreshCw className="h-4 w-4 animate-spin" />
+                          Syncing...
+                        </>
+                      ) : (
+                        <>
+                          <RefreshCw className="h-4 w-4" />
+                          Sync Now
+                        </>
+                      )}
+                    </button>
+                    <button
+                      onClick={() => handleUnlink(device.provider)}
+                      disabled={unlinkMutation.isPending}
+                      className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                      Unlink
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Connect New Devices */}
+      <div className="mb-6">
+        <h2 className="text-lg font-semibold text-gray-900 mb-4">Connect a Device</h2>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {/* Garmin */}
+          <div className="bg-white border border-gray-200 rounded-lg p-6 shadow-sm">
+            <div className="flex items-center gap-4 mb-4">
+              <div className="flex items-center justify-center w-12 h-12 bg-orange-100 rounded-lg">
+                <Activity className="h-6 w-6 text-orange-600" />
+              </div>
+              <div>
+                <h3 className="font-semibold text-gray-900">Garmin</h3>
+                <p className="text-sm text-gray-600">Connect your Garmin device</p>
+              </div>
+            </div>
+            {linkedProviders.includes('garmin') ? (
+              <div className="text-sm text-green-600 font-medium flex items-center gap-2">
+                <Link2 className="h-4 w-4" />
+                Connected
+              </div>
+            ) : (
+              <button
+                onClick={handleConnectGarmin}
+                className="w-full px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 flex items-center justify-center gap-2"
+              >
+                <Link2 className="h-4 w-4" />
+                Connect Garmin
+              </button>
+            )}
+          </div>
+
+          {/* Fitbit */}
+          <div className="bg-white border border-gray-200 rounded-lg p-6 shadow-sm">
+            <div className="flex items-center gap-4 mb-4">
+              <div className="flex items-center justify-center w-12 h-12 bg-blue-100 rounded-lg">
+                <Activity className="h-6 w-6 text-blue-600" />
+              </div>
+              <div>
+                <h3 className="font-semibold text-gray-900">Fitbit</h3>
+                <p className="text-sm text-gray-600">Connect your Fitbit device</p>
+              </div>
+            </div>
+            {linkedProviders.includes('fitbit') ? (
+              <div className="text-sm text-green-600 font-medium flex items-center gap-2">
+                <Link2 className="h-4 w-4" />
+                Connected
+              </div>
+            ) : (
+              <button
+                onClick={handleConnectFitbit}
+                className="w-full px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center justify-center gap-2"
+              >
+                <Link2 className="h-4 w-4" />
+                Connect Fitbit
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Info */}
+      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+        <div className="flex items-start gap-3">
+          <AlertCircle className="h-5 w-5 text-blue-600 mt-0.5" />
+          <div className="text-sm text-blue-800">
+            <p className="font-semibold mb-1">How it works:</p>
+            <ul className="list-disc list-inside space-y-1">
+              <li>Connect your device to authorize StepSquad to access your step data</li>
+              <li>Steps are automatically synced daily via background jobs</li>
+              <li>You can manually sync steps at any time using the "Sync Now" button</li>
+              <li>Synced steps are automatically submitted to your active competitions</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+

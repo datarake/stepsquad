@@ -1,4 +1,4 @@
-import { User, Competition, CompetitionCreateRequest, CompetitionUpdateRequest, ApiError, Team, TeamCreateRequest, TeamJoinRequest, StepIngestRequest, StepIngestResponse, StepHistoryResponse, LeaderboardResponse } from './types';
+import { User, Competition, CompetitionCreateRequest, CompetitionUpdateRequest, ApiError, Team, TeamCreateRequest, TeamJoinRequest, StepIngestRequest, StepIngestResponse, StepHistoryResponse, LeaderboardResponse, DeviceListResponse, OAuthAuthorizeResponse, OAuthCallbackResponse, DeviceSyncResponse, DeviceUnlinkResponse } from './types';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080';
 const USE_DEV_AUTH = import.meta.env.VITE_USE_DEV_AUTH === 'true';
@@ -286,6 +286,79 @@ class ApiClient {
     
     const url = `${API_BASE_URL}/leaderboard/team${queryParams.toString() ? '?' + queryParams.toString() : ''}`;
     const response = await fetch(url, {
+      headers,
+    });
+    return this.handleResponse(response);
+  }
+
+  // Device Integration
+  async getDevices(): Promise<DeviceListResponse> {
+    const headers = await this.getAuthHeaders();
+    const response = await fetch(`${API_BASE_URL}/devices`, {
+      headers,
+    });
+    return this.handleResponse(response);
+  }
+
+  async getGarminAuthUrl(): Promise<OAuthAuthorizeResponse> {
+    const headers = await this.getAuthHeaders();
+    const response = await fetch(`${API_BASE_URL}/oauth/garmin/authorize`, {
+      headers,
+    });
+    return this.handleResponse(response);
+  }
+
+  async getFitbitAuthUrl(): Promise<OAuthAuthorizeResponse> {
+    const headers = await this.getAuthHeaders();
+    const response = await fetch(`${API_BASE_URL}/oauth/fitbit/authorize`, {
+      headers,
+    });
+    return this.handleResponse(response);
+  }
+
+  async handleGarminCallback(code?: string, state?: string, oauth_token?: string, oauth_verifier?: string): Promise<OAuthCallbackResponse> {
+    const headers = await this.getAuthHeaders();
+    const queryParams = new URLSearchParams();
+    if (code) queryParams.append('code', code);
+    if (state) queryParams.append('state', state);
+    if (oauth_token) queryParams.append('oauth_token', oauth_token);
+    if (oauth_verifier) queryParams.append('oauth_verifier', oauth_verifier);
+    
+    const url = `${API_BASE_URL}/oauth/garmin/callback${queryParams.toString() ? '?' + queryParams.toString() : ''}`;
+    const response = await fetch(url, {
+      headers,
+    });
+    return this.handleResponse(response);
+  }
+
+  async handleFitbitCallback(code?: string, state?: string, error?: string): Promise<OAuthCallbackResponse> {
+    const headers = await this.getAuthHeaders();
+    const queryParams = new URLSearchParams();
+    if (code) queryParams.append('code', code);
+    if (state) queryParams.append('state', state);
+    if (error) queryParams.append('error', error);
+    
+    const url = `${API_BASE_URL}/oauth/fitbit/callback${queryParams.toString() ? '?' + queryParams.toString() : ''}`;
+    const response = await fetch(url, {
+      headers,
+    });
+    return this.handleResponse(response);
+  }
+
+  async syncDevice(provider: "garmin" | "fitbit", date?: string): Promise<DeviceSyncResponse> {
+    const headers = await this.getAuthHeaders();
+    const queryParams = date ? `?date=${date}` : '';
+    const response = await fetch(`${API_BASE_URL}/devices/${provider}/sync${queryParams}`, {
+      method: 'POST',
+      headers,
+    });
+    return this.handleResponse(response);
+  }
+
+  async unlinkDevice(provider: "garmin" | "fitbit"): Promise<DeviceUnlinkResponse> {
+    const headers = await this.getAuthHeaders();
+    const response = await fetch(`${API_BASE_URL}/devices/${provider}`, {
+      method: 'DELETE',
       headers,
     });
     return this.handleResponse(response);

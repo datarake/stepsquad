@@ -10,6 +10,8 @@ import { HomePage } from './HomePage';
 import { CompetitionDetailPage } from './CompetitionDetailPage';
 import { CompetitionCreatePage } from './CompetitionCreatePage';
 import { CompetitionEditPage } from './CompetitionEditPage';
+import { DeviceSettingsPage } from './DeviceSettingsPage';
+import { OAuthCallbackPage } from './OAuthCallbackPage';
 import { KeyboardShortcuts } from './KeyboardShortcuts';
 import { ErrorBoundary } from './ErrorBoundary';
 
@@ -85,6 +87,24 @@ function AppRoutes() {
               </AppShell>
             </ProtectedRoute>
           }
+        />
+        <Route
+          path="/devices"
+          element={
+            <ProtectedRoute>
+              <AppShell>
+                <DeviceSettingsPage />
+              </AppShell>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/oauth/garmin/callback"
+          element={<OAuthCallbackPage />}
+        />
+        <Route
+          path="/oauth/fitbit/callback"
+          element={<OAuthCallbackPage />}
         />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

@@ -116,3 +116,50 @@ export interface LeaderboardResponse {
   page_size: number;
   total_pages: number;
 }
+
+// Device Integration Types
+export interface Device {
+  provider: "garmin" | "fitbit";
+  linked_at: string;
+  last_sync: string | null;
+  sync_enabled: boolean;
+}
+
+export interface DeviceListResponse {
+  devices: Device[];
+  count: number;
+}
+
+export interface OAuthAuthorizeResponse {
+  authorization_url: string;
+  state: string;
+  provider: "garmin" | "fitbit";
+}
+
+export interface OAuthCallbackResponse {
+  status: "success" | "error";
+  provider: "garmin" | "fitbit";
+  message: string;
+}
+
+export interface DeviceSyncResponse {
+  status: "success" | "error";
+  provider: "garmin" | "fitbit";
+  date: string;
+  steps: number;
+  competitions: Array<{
+    comp_id: string;
+    status: "submitted" | "error" | "skipped";
+    steps?: number;
+    error?: string;
+    reason?: string;
+  }>;
+  submitted_count: number;
+  message: string;
+}
+
+export interface DeviceUnlinkResponse {
+  status: "success" | "error";
+  provider: "garmin" | "fitbit";
+  message: string;
+}
