@@ -149,7 +149,14 @@ jobs:
         env:
           PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
         run: |
-          API_URL=$(gcloud run services describe stepsquad-api --region ${{ env.REGION }} --format 'value(status.url)')
+          # Try custom domain first, fallback to Cloud Run URL
+          API_URL="https://api.stepsquad.club"
+          # Verify custom domain is accessible, otherwise use Cloud Run URL
+          if ! curl -sf --max-time 5 "${API_URL}/health" > /dev/null 2>&1; then
+            echo "⚠️  Custom domain not yet accessible, using Cloud Run URL"
+            API_URL=$(gcloud run services describe stepsquad-api --region ${{ env.REGION }} --format 'value(status.url)')
+          fi
+          echo "Using API URL: $API_URL"
           echo "api_url=$API_URL" >> $GITHUB_OUTPUT
       
       - name: Build Web Image

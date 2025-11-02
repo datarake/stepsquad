@@ -1,0 +1,56 @@
+DNS Records to Add to Your Domain Registrar (stepsquad.club)
+================================================================
+
+After running the domain mapping commands, Google Cloud provides DNS records.
+Add these records in your domain registrar where you bought stepsquad.club.
+
+IMPORTANT: Wait for these DNS records to be provided by the commands above,
+then add them to your domain registrar. DNS changes can take 1-48 hours to
+propagate (usually 1-2 hours).
+
+================================================================
+BACKEND API (api.stepsquad.club)
+================================================================
+
+Add the CNAME record provided by Google Cloud (see output above).
+
+Example format:
+Type: CNAME
+Name: api
+Value: ghs.googlehosted.com
+TTL: 3600 (or default)
+
+================================================================
+FRONTEND (www.stepsquad.club)
+================================================================
+
+Add the CNAME record provided by Google Cloud (see output above).
+
+Example format:
+Type: CNAME
+Name: www
+Value: ghs.googlehosted.com
+TTL: 3600 (or default)
+
+================================================================
+OPTIONAL: Root Domain Redirect (stepsquad.club -> www.stepsquad.club)
+================================================================
+
+To redirect stepsquad.club to www.stepsquad.club:
+
+Type: A or CNAME
+Name: @
+Value: [Same as www record] OR use URL redirect in registrar settings
+
+Most registrars offer a URL redirect feature - use that if available.
+
+================================================================
+
+After adding DNS records:
+1. Wait 1-2 hours for DNS propagation
+2. SSL certificates are automatically provisioned (takes 5-15 minutes)
+3. Test with: curl https://api.stepsquad.club/health
+4. Test with: curl https://www.stepsquad.club
+
+================================================================
+
