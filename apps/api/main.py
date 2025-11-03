@@ -215,11 +215,13 @@ async def get_current_user(
             return User(**user_data)
             
         except ValueError as e:
-            logging.warning(f"Firebase token verification failed: {e}")
-            raise HTTPException(status_code=401, detail=str(e))
+            error_msg = str(e)
+            logging.warning(f"Firebase token verification failed: {error_msg}", exc_info=True)
+            # Return more detailed error for debugging
+            raise HTTPException(status_code=401, detail=error_msg)
         except Exception as e:
-            logging.error(f"Unexpected error during Firebase auth: {e}")
-            raise HTTPException(status_code=401, detail="Authentication failed")
+            logging.error(f"Unexpected error during Firebase auth: {e}", exc_info=True)
+            raise HTTPException(status_code=401, detail=f"Authentication failed: {str(e)}")
     
     # No valid authentication provided
     raise HTTPException(status_code=401, detail="Authentication required")
