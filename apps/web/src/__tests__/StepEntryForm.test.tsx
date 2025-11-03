@@ -2,7 +2,6 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '../test/utils';
 import userEvent from '@testing-library/user-event';
 import { StepEntryForm } from '../StepEntryForm';
-import { StepIngestRequest } from '../types';
 
 describe('StepEntryForm', () => {
   const mockOnSubmit = vi.fn();
