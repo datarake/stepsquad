@@ -160,9 +160,11 @@ async def get_current_user(
     x_dev_user: Optional[str] = Header(None)
 ) -> User:
     GCP_ENABLED = os.getenv("GCP_ENABLED", "false").lower() == "true"
+    ALLOW_DEV_AUTH_LOCAL = os.getenv("ALLOW_DEV_AUTH_LOCAL", "false").lower() == "true"
     
-    # Dev mode authentication (only when GCP_ENABLED=false)
-    if not GCP_ENABLED and x_dev_user:
+    # Dev mode authentication (when GCP_ENABLED=false OR when ALLOW_DEV_AUTH_LOCAL=true)
+    # This allows testing with Firestore locally while using dev auth
+    if (not GCP_ENABLED or ALLOW_DEV_AUTH_LOCAL) and x_dev_user:
         user_data = get_user(x_dev_user)
         if not user_data:
             # Create user if doesn't exist
