@@ -47,9 +47,28 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           const firebaseUser = await firebaseGetCurrentUser();
           if (firebaseUser) {
             // Refresh token
-            const token = await firebaseGetIdToken();
-            if (token) {
-              localStorage.setItem('firebaseToken', token);
+            try {
+              const token = await firebaseGetIdToken();
+              if (token) {
+                localStorage.setItem('firebaseToken', token);
+                console.debug('Firebase token refreshed and stored');
+              } else {
+                console.warn('Firebase user exists but no token available');
+                // Keep existing token if available
+                const existingToken = localStorage.getItem('firebaseToken');
+                if (!existingToken) {
+                  setLoading(false);
+                  return;
+                }
+              }
+            } catch (error) {
+              console.error('Failed to get Firebase token:', error);
+              // Keep existing token if available
+              const existingToken = localStorage.getItem('firebaseToken');
+              if (!existingToken) {
+                setLoading(false);
+                return;
+              }
             }
           } else {
             // No Firebase user, clear token
@@ -58,6 +77,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             return;
           }
         } else {
+          console.warn('Firebase not initialized - cannot check auth');
           setLoading(false);
           return;
         }
