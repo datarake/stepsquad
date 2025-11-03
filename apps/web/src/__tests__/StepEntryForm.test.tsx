@@ -50,7 +50,6 @@ describe('StepEntryForm', () => {
     // Date input has default value (today), but validation checks for empty string
     // Since HTML date input with min/max might prevent clearing, we test that validation works
     // by ensuring submission is blocked when date is invalid
-    const dateInput = screen.getByLabelText(/date/i) as HTMLInputElement;
     
     // Add steps first
     const stepsInput = screen.getByLabelText(/steps/i);
