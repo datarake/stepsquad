@@ -1,282 +1,198 @@
-# 🏃‍♂️ StepSquad – Move Together, Win Together
+# StepSquad
 
-**StepSquad** is a **team-based step competition platform** that connects with smartwatches and phone sensors (Garmin, Fitbit, HealthKit, and Health Connect) to create fair, transparent, and fun movement challenges.  
-Built by two developers passionate about **fitness** and **clean architecture**, StepSquad shows how **AI + serverless design** can make wellness competitions smarter and more trustworthy.
+A fitness competition platform that brings teams together to compete in step challenges. Built for the Google Cloud Run Hackathon with ADK (Agent Development Kit).
 
-📦 **Repo:** [https://github.com/datarake/stepsquad](https://github.com/datarake/stepsquad)
+## 🎯 Overview
 
----
+StepSquad enables users to:
+- Create and participate in fitness competitions
+- Join teams and compete together
+- Track daily step counts
+- View real-time leaderboards
+- Integrate with Garmin and Fitbit devices
+- Get AI-powered insights and fairness checks
 
-## 🌟 Features
+## 🏗️ Architecture
 
-- 👟 **Team creation & joining** — build or join teams for competitions  
-- 🔄 **Automatic step ingestion** — via smartwatch integrations or manual sync  
-- 🏆 **Daily & total leaderboards** — for individuals and teams  
-- 🧠 **AI fairness detection** — flags unrealistic or fake data  
-- ☁️ **Multi-cloud-ready architecture** — modular and serverless  
-- ⚡ **Real-time aggregation** — Pub/Sub + Firestore + BigQuery pipeline  
-- 🎮 **Gamified dashboards** — for individuals, teams, and companies  
+### Frontend (`apps/web`)
+- **Tech Stack**: React 18, Vite, TypeScript, Tailwind CSS
+- **Authentication**: Firebase Authentication
+- **State Management**: React Query
+- **Testing**: Vitest, React Testing Library, Playwright
+- **Deployment**: Cloud Run (custom domain: `https://www.stepsquad.club`)
 
----
+### Backend (`apps/api`)
+- **Tech Stack**: FastAPI, Python 3.11
+- **Database**: Firestore
+- **Authentication**: Firebase Admin SDK
+- **Testing**: Pytest
+- **Deployment**: Cloud Run (custom domain: `https://api.stepsquad.club`)
 
-## 🧩 Architecture Overview
+### AI Agents (`apps/agents`)
+- **Tech Stack**: Google ADK (Agent Development Kit), Gemini AI
+- **Agents**:
+  - **Sync Agent**: Automatically syncs step data from linked devices
+  - **Fairness Agent**: Detects and flags suspicious step data patterns
+- **Workflow**: Multi-agent orchestration for automated step ingestion and validation
+- **Deployment**: Cloud Run
 
-```mermaid
-flowchart TD
-  subgraph Devices
-    A1(Garmin)
-    A2(Fitbit)
-    A3(HealthKit / HealthConnect)
-  end
+## 🚀 Features
 
-  subgraph API
-    B1[FastAPI – Step Ingest – port 8080]
-  end
+### Core Features
+- ✅ **User Management**: Role-based access control (ADMIN, MEMBER)
+- ✅ **Competition Management**: Create, view, update competitions with status workflow
+- ✅ **Team Management**: Create teams, join/leave teams
+- ✅ **Step Ingestion**: Manual and automatic step entry
+- ✅ **Leaderboards**: Individual and team leaderboards
+- ✅ **Device Integration**: OAuth integration with Garmin and Fitbit
 
-  subgraph Cloud
-    C1[Pub/Sub]
-    C2[Worker Service]
-    C3[Firestore]
-    C4[BigQuery]
-    C5[AI Agents: Sync + Fairness]
-  end
+### AI-Powered Features
+- ✅ **Automated Sync**: AI agent automatically syncs steps from linked devices
+- ✅ **Fairness Checks**: AI agent detects suspicious patterns in step data
+- ✅ **Multi-Agent Workflow**: Orchestrated agents for step validation
 
-  subgraph Frontend
-    D1[React Web Dashboard]
-    D2[Flutter Mobile App]
-  end
+### Infrastructure
+- ✅ **Custom Domains**: `www.stepsquad.club` and `api.stepsquad.club`
+- ✅ **CI/CD**: Automated deployment via GitHub Actions
+- ✅ **Firebase Authentication**: Production-ready authentication
+- ✅ **Firestore Database**: Scalable NoSQL database
 
-  A1 & A2 & A3 --> B1 --> C1 --> C2 --> C3 & C4
-  C3 --> D1
-  C3 --> C5
-  D1 -->|Leaderboard| Users
-  D2 -->|Health Sync| B1
-```
-
-### 🧱 Components
-
-| Component | Tech | Description |
-|------------|------|-------------|
-| **API** | FastAPI (Python) | Step ingestion, teams, leaderboards |
-| **Workers** | Python (GCP Pub/Sub consumer) | Processes step events, writes to Firestore + BigQuery |
-| **Agents** | FastAPI (Python) | Runs fairness & sync jobs via Cloud Scheduler |
-| **Web** | React + Vite | Real-time leaderboard UI |
-| **Mobile** | Flutter | Optional companion app for live sync & notifications |
-
----
-
-## 🧰 Built With
-
-**Languages:** Python · TypeScript · Dart  
-**Frameworks:** FastAPI · React (Vite) · Flutter  
-**Cloud:** Google Cloud Run · Cloud Build · Cloud Storage  
-**Data:** Firestore · BigQuery  
-**Messaging:** Pub/Sub  
-**Infrastructure:** Terraform  
-**Auth:** OAuth2 (Garmin · Fitbit · Google Fit · Apple Health)  
-**AI:** Google ADK (Agent Development Kit)  
-**DevOps:** Docker · Make · GitHub Actions · uv · pnpm  
-**Design:** Figma · Lucide Icons · Tailwind CSS  
-
----
-
-## 🧑‍💻 Local Development
-
-### 🧾 Prerequisites
-
-- Docker + Docker Compose  
-- Python ≥ 3.11 with `uv`  
-- Node.js + `pnpm`  
-- (Optional) Flutter SDK  
-
----
-
-### 🚀 Run the entire stack locally
-
-```bash
-git clone https://github.com/datarake/stepsquad.git
-cd stepsquad
-make dev
-```
-
-This runs all containers via **Docker Compose**:
-
-| Service | Local URL | Internal Port | Notes |
-|----------|------------|---------------|-------|
-| **API** | http://localhost:8004/docs | 8080 | FastAPI backend |
-| **Web** | http://localhost:5173 | 5173 | React dashboard |
-| **Workers** | – | 8080 | Pub/Sub consumer (local mode) |
-
-💡 Inside Docker, every backend service still listens on **port 8080**,  
-but locally Docker maps it to **8004** for the API so you can open it in your browser.
-
----
-
-### 🧪 Seed demo data
-
-```bash
-curl -X POST http://localhost:8004/dev/seed
-```
-
-Then refresh the dashboard at **http://localhost:5173** to see example teams, users, and leaderboards.
-
----
-
-### 🧩 Useful local commands
-
-```bash
-# Run only API locally (with live reload)
-make api
-
-# Run only Web
-make web
-
-# Run workers
-make workers
-
-# Rebuild and start all containers
-make dev
-```
-
----
-
-## ☁️ Deployment (Google Cloud Run)
-
-### 1️⃣ Authenticate and configure project
-
-```bash
-gcloud auth application-default login
-gcloud config set project fluent-coder-476318-n0
-```
-
-### 2️⃣ Create infrastructure
-
-```bash
-cd infra/terraform
-terraform init
-terraform apply -var 'project_id=fluent-coder-476318-n0' -var 'region=europe-west1'
-```
-
-### 3️⃣ Create BigQuery schema
-
-```bash
-make bq_schema
-```
-
-### 4️⃣ Deploy all services
-
-```bash
-export GOOGLE_CLOUD_PROJECT=fluent-coder-476318-n0
-export GCP_REGION=us-central1
-
-make deploy_api
-make deploy_workers
-make deploy_agents
-make deploy_web
-```
-
-**Note**: Services are also automatically deployed via CI/CD on every push to `main`.
-
-Each deployment:
-- Builds the image with **Cloud Build**
-- Pushes it to **Artifact Registry**
-- Deploys to **Cloud Run (managed)**
-
-### 5️⃣ Verify health of all services
-
-```bash
-make check_health
-```
-
-Expected output:
-
-```
-🔍 Checking StepSquad service health in region us-central1...
-✅ stepsquad-api: healthy (...)
-✅ stepsquad-workers: healthy (...)
-✅ stepsquad-agents: healthy (...)
-✅ stepsquad-web: healthy (HTML frontend)
-```
-
----
-
-## ⚙️ Environment Variables
-
-| Key | Description | Example |
-|-----|--------------|----------|
-| `COMP_TZ` | Competition timezone | `Europe/Bucharest` |
-| `GRACE_DAYS` | Days allowed for late data | `2` |
-| `GCP_ENABLED` | Local vs Cloud mode toggle | `true` |
-| `GOOGLE_CLOUD_PROJECT` | GCP project ID | `fluent-coder-476318-n0` |
-| `BQ_DATASET` | BigQuery dataset | `stepsquad` |
-| `PUBSUB_TOPIC_INGEST` | Ingest topic name | `steps.ingest` |
-| `PUBSUB_SUB_INGEST` | Worker subscription | `steps.ingest.sub` |
-| `COMP_TZ` | Competition timezone | `Europe/Bucharest` |
-| `PORT` | Internal runtime port (always 8080) | `8080` |
-
----
-
-## 📁 Folder Structure
+## 📁 Project Structure
 
 ```
 stepsquad/
-├─ apps/
-│  ├─ api/          # FastAPI backend (port 8080 internal / 8004 external)
-│  ├─ workers/      # Pub/Sub consumer
-│  ├─ agents/       # Sync & fairness jobs
-│  ├─ web/          # React dashboard
-│  └─ mobile/       # Flutter app (optional)
-├─ infra/
-│  ├─ terraform/    # IaC definitions
-│  └─ bq/           # BigQuery schema scripts
-├─ deploy/          # Cloud Run deploy scripts
-├─ docker-compose.yml
-├─ Makefile         # Local + Cloud automation
-└─ README.md
+├── apps/
+│   ├── api/              # FastAPI backend
+│   ├── web/              # React frontend
+│   └── agents/           # Google ADK AI agents
+├── .github/
+│   └── workflows/        # CI/CD pipelines
+└── README.md             # This file
 ```
 
----
+## 🔧 Development
 
-## 🧭 Typical Workflows
+### Prerequisites
+- Node.js 18+ and pnpm
+- Python 3.11+ and uv
+- Google Cloud SDK (gcloud)
+- Firebase project setup
 
-### 💻 Local development cycle
-1. Modify backend or web code  
-2. `make dev` to rebuild locally  
-3. Test via http://localhost:8004 and http://localhost:5173  
-4. Commit changes to GitHub  
+### Local Development
 
-### ☁️ Cloud deployment cycle
-1. Push commits → optionally trigger CI/CD  
-2. Run:
-   ```bash
-   make deploy_api
-   make deploy_workers
-   make deploy_agents
-   make deploy_web
-   make check_health
-   ```
-3. Verify endpoints from the output URLs  
+#### Backend
+```bash
+cd apps/api
+uv sync
+uv run uvicorn main:app --host 0.0.0.0 --port 8080 --reload
+```
 
----
+Configure `.env.local`:
+```bash
+GCP_ENABLED=true
+ALLOW_DEV_AUTH_LOCAL=true
+GOOGLE_APPLICATION_CREDENTIALS=./service-account-key.json
+GOOGLE_CLOUD_PROJECT=stepsquad-46d14
+```
 
-## 🚧 Roadmap
-- ✅ Cloud-native MVP (FastAPI · Pub/Sub · Firestore · BigQuery)  
-- 🚧 Add smartwatch integrations (Garmin / Fitbit / HealthKit)  
-- 🚧 Fairness AI models  
-- 🚧 Gamified dashboards & streak tracking  
-- 🚧 Company-level reports  
+#### Frontend
+```bash
+cd apps/web
+pnpm install
+pnpm dev
+```
 
----
+Configure `.env.local`:
+```bash
+VITE_API_BASE_URL=http://localhost:8080
+VITE_USE_DEV_AUTH=false
+VITE_FIREBASE_API_KEY=...
+# ... other Firebase config
+```
 
-## 👥 Contributors
-- **Bogdan Burdalescu**  
-- **Cristian Gheorghe**
+### Environment Setup
 
----
+The project supports both development and production modes:
 
-## 📜 License
-MIT License © 2025 StepSquad Team
+- **Development Mode**: Uses Firestore with optional dev auth bypass
+- **Production Mode**: Uses Firestore with Firebase authentication
 
----
+See `apps/api/env.local.example` for configuration options.
 
-> **Every step counts — fairly.** 🦶
+## 🧪 Testing
+
+### Frontend
+```bash
+cd apps/web
+pnpm test              # Unit tests
+pnpm test:e2e          # E2E tests
+pnpm test:coverage     # Coverage report
+```
+
+### Backend
+```bash
+cd apps/api
+uv run pytest          # Run all tests
+uv run pytest -v       # Verbose output
+```
+
+## 🚀 Deployment
+
+### CI/CD
+Deployments are automated via GitHub Actions:
+- Push to `main` triggers deployment
+- Backend deployed to Cloud Run
+- Frontend deployed to Cloud Run
+- Custom domains configured automatically
+
+### Manual Deployment
+
+#### Backend
+```bash
+cd apps/api
+gcloud run deploy stepsquad-api \
+  --source . \
+  --region us-central1 \
+  --project stepsquad-46d14
+```
+
+#### Frontend
+```bash
+cd apps/web
+gcloud run deploy stepsquad-web \
+  --source . \
+  --region us-central1 \
+  --project stepsquad-46d14
+```
+
+## 🌐 Production URLs
+
+- **Frontend**: https://www.stepsquad.club
+- **Backend API**: https://api.stepsquad.club
+
+## 📚 Documentation
+
+- **API Documentation**: Available at `/docs` endpoint (Swagger UI)
+- **Code Documentation**: Inline comments and docstrings
+
+## 🤝 Contributing
+
+1. Create a feature branch
+2. Make your changes
+3. Run tests
+4. Submit a pull request
+
+## 📝 License
+
+[Add your license here]
+
+## 🏆 Hackathon Submission
+
+Built for: [Google Cloud Run Hackathon](https://run.devpost.com/)
+
+**Key Highlights**:
+- Uses Google ADK (Agent Development Kit) for AI-powered features
+- Multi-agent workflow for automated step ingestion
+- Fairness detection using AI
+- Production-ready with custom domains
+- Full CI/CD pipeline
