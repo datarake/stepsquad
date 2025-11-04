@@ -11,7 +11,7 @@ services:
   web:
     build: ./apps/web
     ports:
-      - "5173:5173"
+      - "5173:8080"
     environment:
       VITE_API_BASE_URL: "http://localhost:8004"
     depends_on:
@@ -26,3 +26,7 @@ services:
       PORT: "8080"  # optional, for consistency
     depends_on:
       - api
+  tekolin-website:
+    build: ./apps/tekolin-website
+    ports:
+      - "5174:8080"

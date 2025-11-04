@@ -25,7 +25,7 @@ const featureHighlights = [
     Icon: Trophy,
     title: 'Win as One',
     description:
-      'Track progress, unlock insights, and climb dynamic leaderboards designed for Google Cloud Run Hackathon teams.',
+      'Track progress, unlock insights, and climb dynamic leaderboards that update in real-time as your team moves together.',
   },
 ];
 
@@ -75,7 +75,7 @@ export function LoginForm() {
             The competitive fitness platform built for squads who thrive together.
           </h1>
           <p className="mt-4 text-lg text-slate-200">
-            StepSquad is a social fitness experience where teams rally around daily movement, track progress with live leaderboards, and unlock AI-powered insights designed for Google Cloud Run Hackathon innovators.
+            StepSquad is a social fitness experience where teams rally around daily movement, track progress with live leaderboards, and unlock AI-powered insights to keep everyone motivated and engaged.
           </p>
           <div className="mt-12 grid gap-6">
             {featureHighlights.map(({ Icon, title, description }) => (
@@ -200,7 +200,7 @@ export function LoginForm() {
             </form>
 
             <p className="mt-8 text-center text-xs text-slate-500">
-              Built for the Google Cloud Run Hackathon &mdash; empowering every team to move, compete, and win together.
+              Empowering every team to move, compete, and win together.
             </p>
           </div>
         </div>
