@@ -61,6 +61,23 @@ export function initFirebase(): { app: FirebaseApp; auth: Auth } | null {
   }
 }
 
+// Helper function to extract error code from Firebase error message
+function extractErrorCode(error: any): string {
+  // Try to get code directly from error object
+  if (error?.code) {
+    return error.code;
+  }
+  
+  // Try to extract from message string like "Firebase: Error (auth/error-code)."
+  const message = error?.message || '';
+  const match = message.match(/\(auth\/([^)]+)\)/);
+  if (match) {
+    return `auth/${match[1]}`;
+  }
+  
+  return '';
+}
+
 export async function firebaseSignIn(email: string, password: string): Promise<string> {
   const firebase = initFirebase();
   if (!firebase) {
@@ -73,7 +90,30 @@ export async function firebaseSignIn(email: string, password: string): Promise<s
     return token;
   } catch (error: any) {
     console.error('Firebase sign in error:', error);
-    throw new Error(error.message || 'Sign in failed');
+    
+    // Extract error code from error object or message
+    const errorCode = extractErrorCode(error);
+    
+    // Provide user-friendly error messages based on Firebase error codes
+    if (errorCode === 'auth/user-not-found') {
+      const customError = new Error('No account found with this email address. Please sign up first.');
+      (customError as any).code = errorCode;
+      throw customError;
+    } else if (errorCode === 'auth/wrong-password' || errorCode === 'auth/invalid-credential') {
+      throw new Error('Incorrect password. Please try again.');
+    } else if (errorCode === 'auth/invalid-email') {
+      throw new Error('Invalid email address. Please check your email and try again.');
+    } else if (errorCode === 'auth/user-disabled') {
+      throw new Error('This account has been disabled. Please contact support.');
+    } else if (errorCode === 'auth/too-many-requests') {
+      throw new Error('Too many failed login attempts. Please try again later.');
+    } else if (errorCode === 'auth/email-already-in-use') {
+      // This shouldn't happen on sign-in, but handle it just in case
+      throw new Error('This email is already registered. Please sign in instead.');
+    }
+    
+    // Fallback: provide a generic but user-friendly message
+    throw new Error('Sign in failed. Please check your credentials and try again.');
   }
 }
 
@@ -89,7 +129,21 @@ export async function firebaseSignUp(email: string, password: string): Promise<s
     return token;
   } catch (error: any) {
     console.error('Firebase sign up error:', error);
-    throw new Error(error.message || 'Sign up failed');
+    
+    // Extract error code from error object or message
+    const errorCode = extractErrorCode(error);
+    
+    // Provide user-friendly error messages
+    if (errorCode === 'auth/email-already-in-use') {
+      throw new Error('This email is already registered. Please sign in instead.');
+    } else if (errorCode === 'auth/weak-password') {
+      throw new Error('Password is too weak. Please choose a stronger password (at least 6 characters).');
+    } else if (errorCode === 'auth/invalid-email') {
+      throw new Error('Invalid email address. Please check your email and try again.');
+    }
+    
+    // Fallback: provide a generic but user-friendly message
+    throw new Error('Sign up failed. Please try again.');
   }
 }
 

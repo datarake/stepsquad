@@ -122,14 +122,37 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const token = await firebaseSignIn(email, password);
         localStorage.setItem('firebaseToken', token);
         await checkAuth();
-      } catch (error) {
-        // If sign in fails, try to create account
-        try {
-          const token = await firebaseSignUp(email, password);
-          localStorage.setItem('firebaseToken', token);
-          await checkAuth();
-        } catch (signUpError) {
-          throw signUpError;
+      } catch (error: any) {
+        // Extract error code to check what type of error occurred
+        const errorCode = error?.code || '';
+        const errorMessage = error?.message || '';
+        
+        // Try to extract error code from message if not in error.code
+        let extractedCode = errorCode;
+        if (!extractedCode && errorMessage) {
+          const match = errorMessage.match(/\(auth\/([^)]+)\)/);
+          if (match) {
+            extractedCode = `auth/${match[1]}`;
+          }
+        }
+        
+        // Only try to sign up if the error is "user not found"
+        // Otherwise, re-throw the original error (wrong password, etc.)
+        if (extractedCode === 'auth/user-not-found' || errorMessage.includes('No account found')) {
+          try {
+            // User doesn't exist, try to create account
+            const token = await firebaseSignUp(email, password);
+            localStorage.setItem('firebaseToken', token);
+            await checkAuth();
+          } catch (signUpError: any) {
+            // The sign-up error should already have a user-friendly message from firebaseSignUp
+            // Just re-throw it
+            throw signUpError;
+          }
+        } else {
+          // Re-throw the original error (wrong password, etc.)
+          // This should already have a user-friendly message from firebaseSignIn
+          throw error;
         }
       }
     }
