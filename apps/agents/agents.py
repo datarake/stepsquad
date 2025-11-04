@@ -60,7 +60,7 @@ if GEMINI_AVAILABLE:
     if GEMINI_API_KEY:
         try:
             configure(api_key=GEMINI_API_KEY)
-            gemini_model = GenerativeModel("gemini-1.5-flash")
+            gemini_model = GenerativeModel("gemini-2.5-flash")
         except Exception as e:
             logging.warning(f"Failed to configure Gemini: {e}")
             gemini_model = None
