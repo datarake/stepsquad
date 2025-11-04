@@ -679,6 +679,61 @@ def api_leave_team(team_id: str, uid: str, current_user: User = Depends(get_curr
     
     return {"ok": True}
 
+def calculate_competition_status(competition_data: dict, existing_status: str = None) -> str:
+    """
+    Calculate the appropriate competition status based on dates.
+    Automatically updates status based on current date relative to competition dates.
+    """
+    now = datetime.utcnow().date()
+    status = existing_status or competition_data.get('status', 'DRAFT')
+    
+    # Get dates (handle both string and date objects)
+    reg_date_str = competition_data.get('registration_open_date')
+    start_date_str = competition_data.get('start_date')
+    end_date_str = competition_data.get('end_date')
+    
+    if not reg_date_str or not start_date_str or not end_date_str:
+        return status
+    
+    try:
+        # Parse dates - handle both YYYY-MM-DD format and ISO datetime strings
+        def parse_date(date_value):
+            if isinstance(date_value, date_type):
+                return date_value
+            if isinstance(date_value, str):
+                # Try ISO format first (with timezone)
+                try:
+                    return datetime.fromisoformat(date_value.replace('Z', '+00:00')).date()
+                except ValueError:
+                    # Try simple YYYY-MM-DD format
+                    return datetime.strptime(date_value.split('T')[0], '%Y-%m-%d').date()
+            return None
+        
+        reg_date = parse_date(reg_date_str)
+        start_date = parse_date(start_date_str)
+        end_date = parse_date(end_date_str)
+        
+        if not reg_date or not start_date or not end_date:
+            return status
+    except (ValueError, AttributeError, TypeError) as e:
+        # If date parsing fails, return current status
+        logging.warning(f"Failed to parse competition dates: {e}")
+        return status
+    
+    # Auto-update status based on dates
+    # Only auto-update if status is DRAFT, REGISTRATION, or ACTIVE (don't override ENDED or ARCHIVED)
+    if status in ['DRAFT', 'REGISTRATION', 'ACTIVE']:
+        if now >= end_date:
+            return 'ENDED'
+        elif now >= start_date:
+            return 'ACTIVE'
+        elif now >= reg_date:
+            return 'REGISTRATION'
+        else:
+            return 'DRAFT'
+    
+    return status
+
 @app.post("/competitions")
 def api_create_competition(body: CompetitionCreate, current_user: User = Depends(get_current_user)):
     if current_user.role != "ADMIN":
@@ -690,6 +745,11 @@ def api_create_competition(body: CompetitionCreate, current_user: User = Depends
         raise HTTPException(status_code=409, detail=f"Competition with comp_id '{body.comp_id}' already exists")
     
     competition_data = body.model_dump()
+    
+    # Auto-calculate status based on dates
+    calculated_status = calculate_competition_status(competition_data, competition_data.get('status'))
+    competition_data['status'] = calculated_status
+    
     competition_data.update({
         "created_by": current_user.uid,
         "created_at": datetime.utcnow().isoformat(),
@@ -699,7 +759,7 @@ def api_create_competition(body: CompetitionCreate, current_user: User = Depends
     create_competition(body.comp_id, competition_data)
     
     # Log admin action
-    logging.info(f"Admin {current_user.email} created competition {body.comp_id}: {body.name}")
+    logging.info(f"Admin {current_user.email} created competition {body.comp_id}: {body.name} with status {calculated_status}")
     
     return {"ok": True, "comp_id": body.comp_id}
 
@@ -715,16 +775,25 @@ def api_update_competition(comp_id: str, body: CompetitionUpdate, current_user: 
     # Additional validation for date ordering when updating dates
     update_data = body.model_dump(exclude_unset=True)
     
-    # Get current values for validation
-    reg_date = update_data.get('registration_open_date', competition.get('registration_open_date'))
-    start_date = update_data.get('start_date', competition.get('start_date'))
-    end_date = update_data.get('end_date', competition.get('end_date'))
+    # Get current values for validation (merge with existing competition data)
+    merged_data = {**competition, **update_data}
+    reg_date = merged_data.get('registration_open_date')
+    start_date = merged_data.get('start_date')
+    end_date = merged_data.get('end_date')
     
     # Validate date ordering
     if reg_date and start_date and reg_date > start_date:
         raise HTTPException(status_code=422, detail="registration_open_date must be before start_date")
     if start_date and end_date and start_date > end_date:
         raise HTTPException(status_code=422, detail="start_date must be before end_date")
+    
+    # Auto-calculate status based on dates if status wasn't explicitly set
+    # Only auto-update if status wasn't in the update_data (let admins override if they explicitly set status)
+    if 'status' not in update_data:
+        calculated_status = calculate_competition_status(merged_data, competition.get('status'))
+        if calculated_status != competition.get('status'):
+            update_data['status'] = calculated_status
+            logging.info(f"Auto-updated competition {comp_id} status from {competition.get('status')} to {calculated_status} based on dates")
     
     update_data["updated_at"] = datetime.utcnow().isoformat()
     update_competition(comp_id, update_data)

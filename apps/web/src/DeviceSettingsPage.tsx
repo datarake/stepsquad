@@ -4,10 +4,13 @@ import { toast } from 'react-hot-toast';
 import { apiClient } from './api';
 import { Device, DeviceSyncResponse } from './types';
 import { Activity, Trash2, RefreshCw, Link2, AlertCircle } from 'lucide-react';
+import { useConfirmDialog } from './useConfirmDialog';
+import { ConfirmDialog } from './ConfirmDialog';
 
 export function DeviceSettingsPage() {
   const queryClient = useQueryClient();
   const [syncing, setSyncing] = useState<string | null>(null);
+  const { confirm, dialogState } = useConfirmDialog();
 
   // Fetch devices
   const { data: devicesData, isLoading, error, refetch } = useQuery({
@@ -76,9 +79,19 @@ export function DeviceSettingsPage() {
   };
 
   const handleUnlink = async (provider: "garmin" | "fitbit") => {
-    if (confirm(`Are you sure you want to unlink your ${provider.charAt(0).toUpperCase() + provider.slice(1)} device?`)) {
-      unlinkMutation.mutate(provider);
+    const confirmed = await confirm({
+      title: 'Unlink Device',
+      message: `Are you sure you want to unlink your ${provider.charAt(0).toUpperCase() + provider.slice(1)} device? You will need to reconnect it to sync steps again.`,
+      confirmText: 'Unlink',
+      cancelText: 'Cancel',
+      variant: 'warning',
+    });
+
+    if (!confirmed) {
+      return;
     }
+
+    unlinkMutation.mutate(provider);
   };
 
   const devices = devicesData?.devices || [];
@@ -252,6 +265,20 @@ export function DeviceSettingsPage() {
           </div>
         </div>
       </div>
+
+      {/* Confirmation Dialog */}
+      {dialogState && (
+        <ConfirmDialog
+          isOpen={dialogState.isOpen}
+          title={dialogState.title}
+          message={dialogState.message}
+          confirmText={dialogState.confirmText}
+          cancelText={dialogState.cancelText}
+          variant={dialogState.variant}
+          onConfirm={dialogState.onConfirm}
+          onCancel={dialogState.onCancel}
+        />
+      )}
     </div>
   );
 }

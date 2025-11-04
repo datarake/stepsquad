@@ -12,6 +12,8 @@ import { StepEntryForm } from './StepEntryForm';
 import { StepHistory } from './StepHistory';
 import { IndividualLeaderboard } from './IndividualLeaderboard';
 import { TeamLeaderboard } from './TeamLeaderboard';
+import { useConfirmDialog } from './useConfirmDialog';
+import { ConfirmDialog } from './ConfirmDialog';
 
 interface CompetitionDetailProps {
   competition: Competition;
@@ -41,6 +43,7 @@ export function CompetitionDetail({ competition }: CompetitionDetailProps) {
   const [showStepEntryForm, setShowStepEntryForm] = useState(false);
   const [activeTab, setActiveTab] = useState<'individual' | 'team'>('individual');
   const [leaderboardDate, setLeaderboardDate] = useState<string | undefined>(undefined);
+  const { confirm, dialogState } = useConfirmDialog();
 
   // Fetch teams for this competition
   const { data: teamsData, isLoading: teamsLoading } = useQuery({
@@ -55,8 +58,15 @@ export function CompetitionDetail({ competition }: CompetitionDetailProps) {
   // Create team mutation
   const createTeamMutation = useMutation({
     mutationFn: (data: TeamCreateRequest) => apiClient.createTeam(data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['competition-teams', competition.comp_id] });
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['competition-teams', competition.comp_id] }),
+        queryClient.invalidateQueries({ queryKey: ['team-leaderboard', competition.comp_id] }),
+        queryClient.invalidateQueries({ queryKey: ['individual-leaderboard', competition.comp_id] }),
+      ]);
+      // Refetch to ensure data is up to date
+      await queryClient.refetchQueries({ queryKey: ['competition-teams', competition.comp_id] });
+      await queryClient.refetchQueries({ queryKey: ['team-leaderboard', competition.comp_id] });
       toast.success('Team created successfully');
       setShowCreateForm(false);
     },
@@ -68,8 +78,15 @@ export function CompetitionDetail({ competition }: CompetitionDetailProps) {
   // Join team mutation
   const joinTeamMutation = useMutation({
     mutationFn: (teamId: string) => apiClient.joinTeam({ team_id: teamId, uid: user!.uid }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['competition-teams', competition.comp_id] });
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['competition-teams', competition.comp_id] }),
+        queryClient.invalidateQueries({ queryKey: ['team-leaderboard', competition.comp_id] }),
+        queryClient.invalidateQueries({ queryKey: ['individual-leaderboard', competition.comp_id] }),
+      ]);
+      // Refetch to ensure data is up to date
+      await queryClient.refetchQueries({ queryKey: ['competition-teams', competition.comp_id] });
+      await queryClient.refetchQueries({ queryKey: ['team-leaderboard', competition.comp_id] });
       toast.success('Joined team successfully');
     },
     onError: (error: Error) => {
@@ -80,8 +97,15 @@ export function CompetitionDetail({ competition }: CompetitionDetailProps) {
   // Leave team mutation
   const leaveTeamMutation = useMutation({
     mutationFn: (teamId: string) => apiClient.leaveTeam(teamId, user!.uid),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['competition-teams', competition.comp_id] });
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['competition-teams', competition.comp_id] }),
+        queryClient.invalidateQueries({ queryKey: ['team-leaderboard', competition.comp_id] }),
+        queryClient.invalidateQueries({ queryKey: ['individual-leaderboard', competition.comp_id] }),
+      ]);
+      // Refetch to ensure data is up to date
+      await queryClient.refetchQueries({ queryKey: ['competition-teams', competition.comp_id] });
+      await queryClient.refetchQueries({ queryKey: ['team-leaderboard', competition.comp_id] });
       toast.success('Left team successfully');
     },
     onError: (error: Error) => {
@@ -90,7 +114,15 @@ export function CompetitionDetail({ competition }: CompetitionDetailProps) {
   });
 
   const handleArchive = async () => {
-    if (!window.confirm('Are you sure you want to archive this competition? This action cannot be undone.')) {
+    const confirmed = await confirm({
+      title: 'Archive Competition',
+      message: 'Are you sure you want to archive this competition? This action cannot be undone.',
+      confirmText: 'Archive',
+      cancelText: 'Cancel',
+      variant: 'danger',
+    });
+
+    if (!confirmed) {
       return;
     }
 
@@ -116,9 +148,18 @@ export function CompetitionDetail({ competition }: CompetitionDetailProps) {
   };
 
   const handleLeaveTeam = async (teamId: string) => {
-    if (!window.confirm('Are you sure you want to leave this team?')) {
+    const confirmed = await confirm({
+      title: 'Leave Team',
+      message: 'Are you sure you want to leave this team? You can join again anytime if there are free spots available.',
+      confirmText: 'Leave Team',
+      cancelText: 'Cancel',
+      variant: 'warning',
+    });
+
+    if (!confirmed) {
       return;
     }
+
     await leaveTeamMutation.mutateAsync(teamId);
   };
 
@@ -321,6 +362,11 @@ export function CompetitionDetail({ competition }: CompetitionDetailProps) {
               <p className="mt-1 text-sm text-gray-500">
                 {teams.length} {teams.length === 1 ? 'team' : 'teams'} registered
               </p>
+              {!canCreateOrJoinTeams && competition.status === 'DRAFT' && (
+                <p className="mt-1 text-sm text-amber-600">
+                  Change competition status to REGISTRATION or ACTIVE to allow team creation
+                </p>
+              )}
             </div>
             {canCreateOrJoinTeams && user && (
               <button
@@ -331,6 +377,15 @@ export function CompetitionDetail({ competition }: CompetitionDetailProps) {
                 <Plus className="h-4 w-4 mr-2" />
                 Create Team
               </button>
+            )}
+            {!canCreateOrJoinTeams && competition.status === 'DRAFT' && isAdmin && (
+              <Link
+                to={`/competitions/${competition.comp_id}/edit`}
+                className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+              >
+                <Settings className="h-4 w-4 mr-2" />
+                Change Status
+              </Link>
             )}
           </div>
 
@@ -495,6 +550,20 @@ export function CompetitionDetail({ competition }: CompetitionDetailProps) {
           )}
         </div>
       </div>
+
+      {/* Confirmation Dialog */}
+      {dialogState && (
+        <ConfirmDialog
+          isOpen={dialogState.isOpen}
+          title={dialogState.title}
+          message={dialogState.message}
+          confirmText={dialogState.confirmText}
+          cancelText={dialogState.cancelText}
+          variant={dialogState.variant}
+          onConfirm={dialogState.onConfirm}
+          onCancel={dialogState.onCancel}
+        />
+      )}
     </div>
   );
 }
