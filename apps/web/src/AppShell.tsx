@@ -31,18 +31,17 @@ export function AppShell({ children }: AppShellProps) {
   const userInitials = useMemo(() => user.email?.[0]?.toUpperCase() ?? '?', [user.email]);
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100">
+    <div className="min-h-screen bg-white">
       {/* Top Navigation */}
-      <nav className="relative border-b border-white/10 bg-gradient-to-r from-indigo-600 via-purple-600 to-blue-600">
+      <nav className="relative border-b border-blue-400/20 bg-gradient-to-r from-blue-500 via-blue-600 to-indigo-500">
         <div className="absolute inset-0 opacity-60">
           <div className="h-full w-full bg-[radial-gradient(circle_at_top,_rgba(255,255,255,0.25),_transparent_55%)]" />
         </div>
         <div className="relative">
           <div className="mx-auto flex h-20 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
             <div className="flex items-center gap-8">
-              <Link to="/" className="group flex items-center gap-2 text-2xl font-semibold tracking-tight">
-                <span className="rounded-full bg-white/20 px-3 py-1 text-sm font-medium uppercase text-white/90">Step</span>
-                <span className="text-white transition group-hover:translate-x-0.5">Squad</span>
+              <Link to="/" className="group flex items-center text-2xl font-bold tracking-tight text-white transition hover:opacity-90">
+                <span>StepSquad</span>
               </Link>
 
               <div className="hidden items-center gap-1 rounded-full bg-white/10 p-1 text-sm font-medium text-white/80 shadow-inner shadow-black/20 backdrop-blur sm:flex">
@@ -54,7 +53,7 @@ export function AppShell({ children }: AppShellProps) {
                     className={({ isActive }) =>
                       `group flex items-center gap-2 rounded-full px-4 py-2 transition-all duration-200 hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white/70 ${
                         isActive
-                          ? 'bg-white/95 text-indigo-600 shadow-sm shadow-black/10'
+                          ? 'bg-white/95 text-blue-600 shadow-sm shadow-black/10'
                           : 'text-white/80 hover:bg-white/10'
                       }`
                     }
@@ -63,7 +62,7 @@ export function AppShell({ children }: AppShellProps) {
                       <>
                         <Icon
                           className={`h-4 w-4 transition ${
-                            isActive ? 'text-indigo-600' : 'text-white/70 group-hover:text-white'
+                            isActive ? 'text-blue-600' : 'text-white/70 group-hover:text-white'
                           }`}
                         />
                         <span className="transition group-hover:text-white">{label}</span>
@@ -76,7 +75,7 @@ export function AppShell({ children }: AppShellProps) {
 
             <div className="flex items-center gap-4">
               <div className="flex items-center gap-3 rounded-2xl bg-white/15 px-4 py-2 shadow-lg shadow-black/20 backdrop-blur">
-                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-white/80 to-white/40 text-lg font-semibold text-indigo-600">
+                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-white/80 to-white/40 text-lg font-semibold text-blue-600">
                   {userInitials}
                 </div>
                 <div className="hidden flex-col sm:flex">
