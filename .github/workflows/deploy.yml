@@ -97,7 +97,7 @@ jobs:
             --platform managed \
             --region ${{ env.REGION }} \
             --allow-unauthenticated \
-            --set-env-vars="GCP_ENABLED=true,GOOGLE_CLOUD_PROJECT=$PROJECT_ID,COMP_TZ=Europe/Bucharest,BQ_DATASET=stepsquad,PUBSUB_TOPIC_INGEST=steps.ingest,GRACE_DAYS=2" \
+            --set-env-vars="GCP_ENABLED=true,GOOGLE_CLOUD_PROJECT=$PROJECT_ID,FIREBASE_PROJECT_ID=stepsquad-46d14,COMP_TZ=Europe/Bucharest,BQ_DATASET=stepsquad,PUBSUB_TOPIC_INGEST=steps.ingest,GRACE_DAYS=2" \
             --port 8080 \
             --memory 512Mi \
             --cpu 1

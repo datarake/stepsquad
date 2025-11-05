@@ -264,7 +264,8 @@ def health():
         "firebase": {
             "status": firebase_status,
             "project": firebase_project,
-            "expected_project": os.getenv("GOOGLE_CLOUD_PROJECT") or os.getenv("GCP_PROJECT_ID") or "stepsquad-46d14"
+            "expected_firebase_project": os.getenv("FIREBASE_PROJECT_ID") or "stepsquad-46d14",
+            "gcp_project": os.getenv("GOOGLE_CLOUD_PROJECT") or os.getenv("GCP_PROJECT_ID") or "not set"
         },
     }
     

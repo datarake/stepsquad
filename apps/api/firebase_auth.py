@@ -38,24 +38,29 @@ def init_firebase():
     try:
         # Try to use Application Default Credentials (for Cloud Run, GKE, etc.)
         # This will use the service account attached to the environment
-        # Explicitly set project ID to match Firebase project
-        project_id = os.getenv("GOOGLE_CLOUD_PROJECT") or os.getenv("GCP_PROJECT_ID") or "stepsquad-46d14"
+        # IMPORTANT: Use Firebase project ID, not GCP project ID
+        # Firebase project ID can be different from GCP project ID
+        # Check for explicit Firebase project ID first, then fall back to defaults
+        firebase_project_id = os.getenv("FIREBASE_PROJECT_ID") or "stepsquad-46d14"
+        gcp_project_id = os.getenv("GOOGLE_CLOUD_PROJECT") or os.getenv("GCP_PROJECT_ID")
         
-        logging.info(f"Attempting to initialize Firebase Admin SDK with project: {project_id}")
+        logging.info(f"Attempting to initialize Firebase Admin SDK with Firebase project: {firebase_project_id} (GCP project: {gcp_project_id})")
         
         # Try to initialize with ADC
         try:
-            # Initialize with explicit project ID to ensure it matches Firebase project
-            _firebase_app = firebase_admin.initialize_app(options={'projectId': project_id})
+            # Initialize with explicit Firebase project ID (not GCP project ID)
+            # This is critical - tokens are issued for the Firebase project, not GCP project
+            _firebase_app = firebase_admin.initialize_app(options={'projectId': firebase_project_id})
             
             # Verify the project ID matches
-            if _firebase_app.project_id != project_id:
-                logging.warning(
-                    f"Firebase app project ID ({_firebase_app.project_id}) doesn't match expected ({project_id}). "
-                    "This may cause token verification issues."
+            if _firebase_app.project_id != firebase_project_id:
+                logging.error(
+                    f"CRITICAL: Firebase app project ID ({_firebase_app.project_id}) doesn't match expected ({firebase_project_id}). "
+                    "Token verification will fail!"
                 )
+            else:
+                logging.info(f"Firebase Admin SDK initialized with Application Default Credentials (Firebase project: {_firebase_app.project_id})")
             
-            logging.info(f"Firebase Admin SDK initialized with Application Default Credentials (project: {_firebase_app.project_id})")
             return _firebase_app
         except ValueError as e:
             # If app already exists, get it
@@ -64,11 +69,13 @@ def init_firebase():
                 logging.info(f"Firebase Admin SDK already initialized, retrieved existing app (project: {_firebase_app.project_id})")
                 
                 # Verify project ID matches
-                if _firebase_app.project_id != project_id:
-                    logging.warning(
-                        f"Existing Firebase app project ID ({_firebase_app.project_id}) doesn't match expected ({project_id}). "
-                        "This may cause token verification issues."
+                if _firebase_app.project_id != firebase_project_id:
+                    logging.error(
+                        f"CRITICAL: Existing Firebase app project ID ({_firebase_app.project_id}) doesn't match expected ({firebase_project_id}). "
+                        "Token verification will fail! Consider restarting the service."
                     )
+                else:
+                    logging.info(f"Firebase project ID matches: {_firebase_app.project_id}")
                 
                 return _firebase_app
             logging.error(f"Firebase initialization ValueError: {e}", exc_info=True)
