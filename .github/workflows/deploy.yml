@@ -177,24 +177,27 @@ jobs:
             exit 1
           fi
           cd apps/web
-          # Build Docker image with build arguments
-          BUILD_ARGS="--build-arg VITE_API_BASE_URL=${{ steps.get-api-url.outputs.api_url }} --build-arg VITE_USE_DEV_AUTH=false"
           
-          # Add Firebase build arguments if available
+          IMAGE_URL="${{ env.REGION }}-docker.pkg.dev/$PROJECT_ID/${{ env.AR_REPO }}/web:${{ github.sha }}"
+          
+          # Build substitutions for Cloud Build
+          SUBSTITUTIONS="_VITE_API_BASE_URL=${{ steps.get-api-url.outputs.api_url }},_VITE_USE_DEV_AUTH=false,_IMAGE_URL=$IMAGE_URL"
+          
+          # Add Firebase substitutions if available
           if [ -n "$VITE_FIREBASE_API_KEY" ]; then
-            BUILD_ARGS="$BUILD_ARGS --build-arg VITE_FIREBASE_API_KEY=$VITE_FIREBASE_API_KEY"
-            BUILD_ARGS="$BUILD_ARGS --build-arg VITE_FIREBASE_AUTH_DOMAIN=$VITE_FIREBASE_AUTH_DOMAIN"
-            BUILD_ARGS="$BUILD_ARGS --build-arg VITE_FIREBASE_PROJECT_ID=$VITE_FIREBASE_PROJECT_ID"
-            BUILD_ARGS="$BUILD_ARGS --build-arg VITE_FIREBASE_STORAGE_BUCKET=$VITE_FIREBASE_STORAGE_BUCKET"
-            BUILD_ARGS="$BUILD_ARGS --build-arg VITE_FIREBASE_MESSAGING_SENDER_ID=$VITE_FIREBASE_MESSAGING_SENDER_ID"
-            BUILD_ARGS="$BUILD_ARGS --build-arg VITE_FIREBASE_APP_ID=$VITE_FIREBASE_APP_ID"
+            SUBSTITUTIONS="$SUBSTITUTIONS,_VITE_FIREBASE_API_KEY=$VITE_FIREBASE_API_KEY"
+            SUBSTITUTIONS="$SUBSTITUTIONS,_VITE_FIREBASE_AUTH_DOMAIN=$VITE_FIREBASE_AUTH_DOMAIN"
+            SUBSTITUTIONS="$SUBSTITUTIONS,_VITE_FIREBASE_PROJECT_ID=$VITE_FIREBASE_PROJECT_ID"
+            SUBSTITUTIONS="$SUBSTITUTIONS,_VITE_FIREBASE_STORAGE_BUCKET=$VITE_FIREBASE_STORAGE_BUCKET"
+            SUBSTITUTIONS="$SUBSTITUTIONS,_VITE_FIREBASE_MESSAGING_SENDER_ID=$VITE_FIREBASE_MESSAGING_SENDER_ID"
+            SUBSTITUTIONS="$SUBSTITUTIONS,_VITE_FIREBASE_APP_ID=$VITE_FIREBASE_APP_ID"
             echo "✅ Firebase environment variables will be passed as build arguments"
           else
             echo "⚠️  Warning: Firebase environment variables not set - Firebase authentication will not work"
           fi
           
-          # Build and submit with build arguments
-          gcloud builds submit $BUILD_ARGS --tag ${{ env.REGION }}-docker.pkg.dev/$PROJECT_ID/${{ env.AR_REPO }}/web:${{ github.sha }}
+          # Build and submit using Cloud Build config file
+          gcloud builds submit --config=cloudbuild.yaml --substitutions="$SUBSTITUTIONS"
       
       - name: Deploy to Cloud Run
         env:
