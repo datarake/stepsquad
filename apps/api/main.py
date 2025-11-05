@@ -156,11 +156,14 @@ class User(BaseModel):
 
 # Authentication dependency
 async def get_current_user(
-    authorization: Optional[str] = Header(None),
-    x_dev_user: Optional[str] = Header(None)
+    authorization: Optional[str] = Header(None, alias="Authorization"),
+    x_dev_user: Optional[str] = Header(None, alias="X-Dev-User")
 ) -> User:
     GCP_ENABLED = os.getenv("GCP_ENABLED", "false").lower() == "true"
     ALLOW_DEV_AUTH_LOCAL = os.getenv("ALLOW_DEV_AUTH_LOCAL", "false").lower() == "true"
+    
+    # Log authentication attempt for debugging (without sensitive data)
+    logging.debug(f"Auth attempt: GCP_ENABLED={GCP_ENABLED}, has_auth={bool(authorization)}, has_dev={bool(x_dev_user)}")
     
     # Dev mode authentication (when GCP_ENABLED=false OR when ALLOW_DEV_AUTH_LOCAL=true)
     # This allows testing with Firestore locally while using dev auth
@@ -181,11 +184,16 @@ async def get_current_user(
         return User(**user_data)
     
     # Firebase authentication (production mode)
-    if GCP_ENABLED and authorization:
-        if not authorization.startswith("Bearer "):
-            raise HTTPException(status_code=401, detail="Invalid authorization header")
+    if GCP_ENABLED:
+        if not authorization:
+            logging.warning("GCP_ENABLED=true but no authorization header provided")
+            raise HTTPException(status_code=401, detail="Authentication required: Authorization header missing")
         
-        token = authorization.split(" ")[1]
+        if not authorization.startswith("Bearer "):
+            logging.warning(f"Invalid authorization header format: {authorization[:20]}...")
+            raise HTTPException(status_code=401, detail="Invalid authorization header format. Expected 'Bearer <token>'")
+        
+        token = authorization.split(" ", 1)[1]  # Use split with maxsplit to handle tokens with spaces
         
         try:
             # Verify Firebase ID token
@@ -224,6 +232,7 @@ async def get_current_user(
             raise HTTPException(status_code=401, detail=f"Authentication failed: {str(e)}")
     
     # No valid authentication provided
+    logging.warning(f"Authentication failed: GCP_ENABLED={GCP_ENABLED}, has_auth={bool(authorization)}, has_dev={bool(x_dev_user)}")
     raise HTTPException(status_code=401, detail="Authentication required")
 
 @app.get("/health")
@@ -231,27 +240,33 @@ def health():
     """Health check endpoint with system status"""
     from firebase_auth import init_firebase
     
+    gcp_enabled = os.getenv("GCP_ENABLED", "false").lower() == "true"
+    firebase_status = "not_initialized"
+    firebase_project = None
+    
+    if gcp_enabled:
+        try:
+            firebase_app = init_firebase()
+            if firebase_app:
+                firebase_status = "initialized"
+                firebase_project = firebase_app.project_id
+            else:
+                firebase_status = "failed_to_initialize"
+        except Exception as e:
+            firebase_status = f"error: {str(e)}"
+            logging.error(f"Firebase initialization check failed: {e}", exc_info=True)
+    
     health_status = {
         "ok": True,
         "time": datetime.utcnow().isoformat(),
         "tz": COMP_TZ,
-        "gcp_enabled": os.getenv("GCP_ENABLED", "false").lower() == "true",
+        "gcp_enabled": gcp_enabled,
+        "firebase": {
+            "status": firebase_status,
+            "project": firebase_project,
+            "expected_project": os.getenv("GOOGLE_CLOUD_PROJECT") or os.getenv("GCP_PROJECT_ID") or "stepsquad-46d14"
+        },
     }
-    
-    # Check Firebase initialization status
-    if health_status["gcp_enabled"]:
-        try:
-            firebase_app = init_firebase()
-            health_status["firebase_initialized"] = firebase_app is not None
-            if firebase_app is None:
-                health_status["firebase_error"] = "Firebase initialization returned None"
-        except Exception as e:
-            health_status["firebase_initialized"] = False
-            health_status["firebase_error"] = str(e)
-            health_status["ok"] = False  # Mark as unhealthy if Firebase fails
-    else:
-        health_status["firebase_initialized"] = False
-        health_status["mode"] = "dev"
     
     return health_status
 

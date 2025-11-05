@@ -24,15 +24,60 @@ def init_firebase():
         logging.info("Firebase Admin SDK not initialized (GCP_ENABLED=false)")
         return None
     
+    # Check if Firebase is already initialized (might have been initialized elsewhere)
+    try:
+        apps = firebase_admin._apps
+        if apps:
+            # Use the existing app
+            _firebase_app = list(apps.values())[0]
+            logging.info("Firebase Admin SDK already initialized, reusing existing app")
+            return _firebase_app
+    except Exception:
+        pass
+    
     try:
         # Try to use Application Default Credentials (for Cloud Run, GKE, etc.)
         # This will use the service account attached to the environment
         # Explicitly set project ID to match Firebase project
         project_id = os.getenv("GOOGLE_CLOUD_PROJECT") or os.getenv("GCP_PROJECT_ID") or "stepsquad-46d14"
-        _firebase_app = firebase_admin.initialize_app(options={'projectId': project_id})
-        logging.info(f"Firebase Admin SDK initialized with Application Default Credentials (project: {project_id})")
+        
+        logging.info(f"Attempting to initialize Firebase Admin SDK with project: {project_id}")
+        
+        # Try to initialize with ADC
+        try:
+            # Initialize with explicit project ID to ensure it matches Firebase project
+            _firebase_app = firebase_admin.initialize_app(options={'projectId': project_id})
+            
+            # Verify the project ID matches
+            if _firebase_app.project_id != project_id:
+                logging.warning(
+                    f"Firebase app project ID ({_firebase_app.project_id}) doesn't match expected ({project_id}). "
+                    "This may cause token verification issues."
+                )
+            
+            logging.info(f"Firebase Admin SDK initialized with Application Default Credentials (project: {_firebase_app.project_id})")
+            return _firebase_app
+        except ValueError as e:
+            # If app already exists, get it
+            if "already exists" in str(e).lower():
+                _firebase_app = firebase_admin.get_app()
+                logging.info(f"Firebase Admin SDK already initialized, retrieved existing app (project: {_firebase_app.project_id})")
+                
+                # Verify project ID matches
+                if _firebase_app.project_id != project_id:
+                    logging.warning(
+                        f"Existing Firebase app project ID ({_firebase_app.project_id}) doesn't match expected ({project_id}). "
+                        "This may cause token verification issues."
+                    )
+                
+                return _firebase_app
+            logging.error(f"Firebase initialization ValueError: {e}", exc_info=True)
+            raise
+        except Exception as e:
+            logging.error(f"Failed to initialize Firebase with ADC: {e}", exc_info=True)
+            raise
     except Exception as e:
-        logging.warning(f"Failed to initialize Firebase with ADC: {e}")
+        logging.warning(f"Failed to initialize Firebase with ADC: {e}", exc_info=True)
         # Fallback: try using explicit credentials file
         creds_path = os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
         if creds_path:
@@ -42,8 +87,17 @@ def init_firebase():
                     cred = credentials.Certificate(creds_path)
                     _firebase_app = firebase_admin.initialize_app(cred)
                     logging.info(f"Firebase Admin SDK initialized with credentials from {creds_path}")
+                    return _firebase_app
+                except ValueError as e2:
+                    # If app already exists, get it
+                    if "already exists" in str(e2).lower():
+                        _firebase_app = firebase_admin.get_app()
+                        logging.info("Firebase Admin SDK already initialized, retrieved existing app")
+                        return _firebase_app
+                    logging.error(f"Failed to initialize Firebase with credentials file: {e2}", exc_info=True)
+                    raise
                 except Exception as e2:
-                    logging.error(f"Failed to initialize Firebase with credentials file: {e2}")
+                    logging.error(f"Failed to initialize Firebase with credentials file: {e2}", exc_info=True)
                     raise
             else:
                 # Might be a secret reference, try to read from mounted path
@@ -52,8 +106,16 @@ def init_firebase():
                     cred = credentials.Certificate(creds_path)
                     _firebase_app = firebase_admin.initialize_app(cred)
                     logging.info(f"Firebase Admin SDK initialized with credentials from {creds_path}")
+                    return _firebase_app
+                except ValueError as e2:
+                    # If app already exists, get it
+                    if "already exists" in str(e2).lower():
+                        _firebase_app = firebase_admin.get_app()
+                        logging.info("Firebase Admin SDK already initialized, retrieved existing app")
+                        return _firebase_app
+                    logging.warning(f"Credentials path {creds_path} not found or invalid: {e2}", exc_info=True)
                 except Exception as e2:
-                    logging.warning(f"Credentials path {creds_path} not found or invalid: {e2}")
+                    logging.warning(f"Credentials path {creds_path} not found or invalid: {e2}", exc_info=True)
         else:
             logging.warning("Firebase Admin SDK initialization failed: No credentials available")
             logging.warning("Set GOOGLE_APPLICATION_CREDENTIALS or ensure service account has Firebase Admin role")
@@ -84,30 +146,51 @@ def verify_id_token(id_token: str) -> Dict:
     if _firebase_app is None:
         # Try to initialize again with explicit error handling
         try:
+            logging.info("Firebase app is None, attempting to initialize...")
             init_firebase()
         except Exception as e:
-            logging.error(f"Firebase Admin SDK initialization failed during token verification: {e}")
+            logging.error(f"Firebase Admin SDK initialization failed during token verification: {e}", exc_info=True)
             raise ValueError(f"Firebase Admin SDK not initialized: {str(e)}")
     
     if _firebase_app is None:
+        # Log environment for debugging
+        gcp_enabled = os.getenv("GCP_ENABLED", "false")
+        project_id = os.getenv("GOOGLE_CLOUD_PROJECT") or os.getenv("GCP_PROJECT_ID") or "not set"
+        creds_path = os.getenv("GOOGLE_APPLICATION_CREDENTIALS") or "not set"
+        logging.error(
+            f"Firebase Admin SDK not initialized. "
+            f"GCP_ENABLED={gcp_enabled}, PROJECT_ID={project_id}, "
+            f"GOOGLE_APPLICATION_CREDENTIALS={creds_path}"
+        )
         raise ValueError("Firebase Admin SDK not initialized. Check service account permissions.")
     
     try:
+        # Log Firebase app status for debugging
+        if _firebase_app:
+            logging.info(f"Verifying token with Firebase app: project={_firebase_app.project_id}")
+        else:
+            logging.error("Firebase app is None when trying to verify token")
+            raise ValueError("Firebase Admin SDK not initialized")
+        
         # Verify the ID token
         # Use check_revoked=False to allow unverified emails
-        decoded_token = auth.verify_id_token(id_token, check_revoked=False)
-        logging.debug(f"Token verified successfully for user: {decoded_token.get('email', 'unknown')}")
+        decoded_token = auth.verify_id_token(id_token, check_revoked=False, app=_firebase_app)
+        logging.info(f"Token verified successfully for user: {decoded_token.get('email', 'unknown')}")
         return decoded_token
     except auth.InvalidIdTokenError as e:
-        logging.warning(
-            "Invalid Firebase ID token",
+        error_msg = str(e)
+        error_code = getattr(e, "code", "INVALID_TOKEN")
+        logging.error(
+            f"Invalid Firebase ID token: {error_msg} (code: {error_code})",
+            exc_info=True,
             extra={
                 "error_type": "InvalidIdTokenError",
-                "error_message": str(e),
-                "error_code": getattr(e, "code", "INVALID_TOKEN")
+                "error_message": error_msg,
+                "error_code": error_code,
+                "token_preview": id_token[:50] + "..." if len(id_token) > 50 else id_token
             }
         )
-        raise ValueError("Invalid authentication token")
+        raise ValueError(f"Invalid authentication token: {error_msg}")
     except auth.ExpiredIdTokenError as e:
         logging.warning(
             "Expired Firebase ID token",
