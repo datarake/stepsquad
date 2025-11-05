@@ -13,7 +13,9 @@ def _fs_coll(name: str):
     if not GCP_ENABLED:
         return None
     try:
-        client = firestore.Client()
+        # IMPORTANT: Use Firebase project ID for Firestore, not GCP project ID
+        firebase_project_id = os.getenv("FIREBASE_PROJECT_ID") or "stepsquad-46d14"
+        client = firestore.Client(project=firebase_project_id)
         return client.collection(name)
     except Exception:
         return None
