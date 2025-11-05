@@ -25,6 +25,25 @@ def create_team(team_id: str, name: str, owner_uid: str, comp_id: str | None = N
         _fs_coll("team_members").document(team_id).set({"members": [owner_uid]})
     TEAMS[team_id] = doc
     TEAM_MEMBERS.setdefault(team_id, []).append(owner_uid)
+
+def update_team(team_id: str, name: str) -> bool:
+    """Update team name"""
+    if team_id not in TEAMS:
+        if GCP_ENABLED and _fs_coll("teams"):
+            doc_ref = _fs_coll("teams").document(team_id)
+            doc = doc_ref.get()
+            if not doc.exists:
+                return False
+            doc_ref.update({"name": name})
+            return True
+        return False
+    
+    TEAMS[team_id]["name"] = name
+    
+    if GCP_ENABLED and _fs_coll("teams"):
+        _fs_coll("teams").document(team_id).update({"name": name})
+    
+    return True
 def join_team(team_id: str, uid: str):
     TEAM_MEMBERS.setdefault(team_id, [])
     if uid not in TEAM_MEMBERS[team_id]:
@@ -48,12 +67,29 @@ def get_team(team_id: str) -> dict | None:
                 team_data["members"] = members_doc.to_dict().get("members", [])
             else:
                 team_data["members"] = []
+            
+            # Ensure owner is always in members list (fix for data inconsistency)
+            owner_uid = team_data.get("owner_uid")
+            if owner_uid and owner_uid not in team_data["members"]:
+                team_data["members"].append(owner_uid)
+                # Update Firestore to fix inconsistency
+                members_ref.set({"members": team_data["members"]})
+            
             return team_data
         return None
     team_data = TEAMS.get(team_id)
     if team_data:
         team_data = team_data.copy()
-        team_data["members"] = TEAM_MEMBERS.get(team_id, [])
+        members = TEAM_MEMBERS.get(team_id, [])
+        team_data["members"] = members
+        
+        # Ensure owner is always in members list (fix for data inconsistency)
+        owner_uid = team_data.get("owner_uid")
+        if owner_uid and owner_uid not in members:
+            members.append(owner_uid)
+            TEAM_MEMBERS[team_id] = members
+            team_data["members"] = members
+    
     return team_data
 
 def get_teams(comp_id: str | None = None) -> list[dict]:
@@ -88,18 +124,27 @@ def get_teams(comp_id: str | None = None) -> list[dict]:
 
 def leave_team(team_id: str, uid: str) -> bool:
     """Remove a member from a team"""
+    # Check Firestore first if enabled
+    if GCP_ENABLED and _fs_coll("team_members"):
+        tm_ref = _fs_coll("team_members").document(team_id)
+        tm_doc = tm_ref.get()
+        if tm_doc.exists:
+            tm = tm_doc.to_dict() or {"members": []}
+            if uid in tm["members"]:
+                tm["members"].remove(uid)
+                tm_ref.set(tm)
+                # Also update local storage for consistency
+                if team_id in TEAM_MEMBERS and uid in TEAM_MEMBERS[team_id]:
+                    TEAM_MEMBERS[team_id].remove(uid)
+                return True
+        # If team doesn't exist in Firestore, return False
+        return False
+    
+    # Local storage only
     if team_id not in TEAM_MEMBERS or uid not in TEAM_MEMBERS[team_id]:
         return False
     
     TEAM_MEMBERS[team_id].remove(uid)
-    
-    if GCP_ENABLED and _fs_coll("team_members"):
-        tm_ref = _fs_coll("team_members").document(team_id)
-        tm = tm_ref.get().to_dict() or {"members": []}
-        if uid in tm["members"]:
-            tm["members"].remove(uid)
-            tm_ref.set(tm)
-    
     return True
 def create_competition(comp_id: str, data: dict):
     if GCP_ENABLED and _fs_coll("competitions"):

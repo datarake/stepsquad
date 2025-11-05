@@ -1,6 +1,6 @@
 import React from 'react';
 import { Team } from './types';
-import { Users } from 'lucide-react';
+import { Users, Edit2 } from 'lucide-react';
 
 interface TeamListProps {
   teams: Team[];
@@ -11,9 +11,10 @@ interface TeamListProps {
   currentUserUid: string;
   onJoinTeam: (teamId: string) => void;
   onLeaveTeam: (teamId: string) => void;
+  onRenameTeam?: (teamId: string, currentName: string) => void;
 }
 
-export function TeamList({ teams, competition, currentUserUid, onJoinTeam, onLeaveTeam }: TeamListProps) {
+export function TeamList({ teams, competition, currentUserUid, onJoinTeam, onLeaveTeam, onRenameTeam }: TeamListProps) {
   const canJoinOrLeave = competition.status === 'REGISTRATION' || competition.status === 'ACTIVE';
 
   const isUserMember = (team: Team) => {
@@ -52,6 +53,15 @@ export function TeamList({ teams, competition, currentUserUid, onJoinTeam, onLea
               <div className="flex-1">
                 <div className="flex items-center gap-2">
                   <h3 className="text-lg font-semibold text-gray-900">{team.name}</h3>
+                  {isOwner && onRenameTeam && (
+                    <button
+                      onClick={() => onRenameTeam(team.team_id, team.name)}
+                      className="text-gray-400 hover:text-blue-600 transition-colors"
+                      title="Rename team"
+                    >
+                      <Edit2 className="h-4 w-4" />
+                    </button>
+                  )}
                   {isOwner && (
                     <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800">
                       Owner

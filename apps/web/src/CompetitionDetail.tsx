@@ -8,6 +8,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import { TeamList } from './TeamList';
 import { TeamCreateForm } from './TeamCreateForm';
+import { TeamRenameForm } from './TeamRenameForm';
 import { StepEntryForm } from './StepEntryForm';
 import { StepHistory } from './StepHistory';
 import { IndividualLeaderboard } from './IndividualLeaderboard';
@@ -40,6 +41,8 @@ export function CompetitionDetail({ competition }: CompetitionDetailProps) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [showCreateForm, setShowCreateForm] = useState(false);
+  const [showRenameForm, setShowRenameForm] = useState(false);
+  const [renamingTeam, setRenamingTeam] = useState<{ teamId: string; currentName: string } | null>(null);
   const [showStepEntryForm, setShowStepEntryForm] = useState(false);
   const [activeTab, setActiveTab] = useState<'individual' | 'team'>('individual');
   const [leaderboardDate, setLeaderboardDate] = useState<string | undefined>(undefined);
@@ -113,6 +116,26 @@ export function CompetitionDetail({ competition }: CompetitionDetailProps) {
     },
   });
 
+  // Update team mutation
+  const updateTeamMutation = useMutation({
+    mutationFn: ({ teamId, name }: { teamId: string; name: string }) => apiClient.updateTeam(teamId, name),
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['competition-teams', competition.comp_id] }),
+        queryClient.invalidateQueries({ queryKey: ['team-leaderboard', competition.comp_id] }),
+      ]);
+      // Refetch to ensure data is up to date
+      await queryClient.refetchQueries({ queryKey: ['competition-teams', competition.comp_id] });
+      await queryClient.refetchQueries({ queryKey: ['team-leaderboard', competition.comp_id] });
+      toast.success('Team renamed successfully');
+      setShowRenameForm(false);
+      setRenamingTeam(null);
+    },
+    onError: (error: Error) => {
+      toast.error(error.message || 'Failed to rename team');
+    },
+  });
+
   const handleArchive = async () => {
     const confirmed = await confirm({
       title: 'Archive Competition',
@@ -145,6 +168,15 @@ export function CompetitionDetail({ competition }: CompetitionDetailProps) {
 
   const handleJoinTeam = async (teamId: string) => {
     await joinTeamMutation.mutateAsync(teamId);
+  };
+
+  const handleRenameTeam = (teamId: string, currentName: string) => {
+    setRenamingTeam({ teamId, currentName });
+    setShowRenameForm(true);
+  };
+
+  const handleUpdateTeam = async (teamId: string, name: string) => {
+    await updateTeamMutation.mutateAsync({ teamId, name });
   };
 
   const handleLeaveTeam = async (teamId: string) => {
@@ -368,7 +400,7 @@ export function CompetitionDetail({ competition }: CompetitionDetailProps) {
                 </p>
               )}
             </div>
-            {canCreateOrJoinTeams && user && (
+            {canCreateOrJoinTeams && user && !isUserInTeam && (
               <button
                 onClick={() => setShowCreateForm(true)}
                 disabled={teams.length >= competition.max_teams}
@@ -404,6 +436,7 @@ export function CompetitionDetail({ competition }: CompetitionDetailProps) {
               currentUserUid={user?.uid || ''}
               onJoinTeam={handleJoinTeam}
               onLeaveTeam={handleLeaveTeam}
+              onRenameTeam={handleRenameTeam}
             />
           )}
         </div>
@@ -418,6 +451,19 @@ export function CompetitionDetail({ competition }: CompetitionDetailProps) {
           currentTeamCount={teams.length}
           onSubmit={handleCreateTeam}
           onCancel={() => setShowCreateForm(false)}
+        />
+      )}
+
+      {/* Rename Team Modal */}
+      {showRenameForm && renamingTeam && (
+        <TeamRenameForm
+          teamId={renamingTeam.teamId}
+          currentName={renamingTeam.currentName}
+          onSubmit={handleUpdateTeam}
+          onCancel={() => {
+            setShowRenameForm(false);
+            setRenamingTeam(null);
+          }}
         />
       )}
 

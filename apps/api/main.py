@@ -16,7 +16,7 @@ if env_path.exists():
 
 from gcp_clients import init_clients
 from storage import (
-    upsert_user, create_team, join_team, leave_team, create_competition,
+    upsert_user, create_team, update_team, join_team, leave_team, create_competition,
     write_daily_steps, get_user_steps, check_idempotency, is_user_in_team_for_competition,
     individual_leaderboard, team_leaderboard,
     get_user, get_all_users, get_team, get_teams, get_competition, get_competitions, update_competition, delete_competition
@@ -73,6 +73,9 @@ class TeamCreate(BaseModel):
 class TeamJoin(BaseModel):
     team_id: str
     uid: str
+
+class TeamUpdate(BaseModel):
+    name: str = Field(min_length=1, max_length=50)
 
 class CompetitionCreate(BaseModel):
     comp_id: str
@@ -612,6 +615,13 @@ def api_create_team(body: TeamCreate, current_user: User = Depends(get_current_u
     if body.owner_uid != current_user.uid:
         raise HTTPException(status_code=403, detail="Cannot create team for another user")
     
+    # Check if user is already in a team in this competition
+    if is_user_in_team_for_competition(current_user.uid, body.comp_id):
+        raise HTTPException(
+            status_code=409,
+            detail="You are already a member of a team in this competition. Please leave your current team before creating a new one."
+        )
+    
     # Create team
     team_id = uuid.uuid4().hex[:8]
     create_team(team_id, body.name, body.owner_uid, body.comp_id)
@@ -639,6 +649,13 @@ def api_join_team(body: TeamJoin, current_user: User = Depends(get_current_user)
     # Get competition to check limits
     comp_id = team.get("comp_id")
     if comp_id:
+        # Check if user is already in another team in this competition
+        if is_user_in_team_for_competition(body.uid, comp_id):
+            raise HTTPException(
+                status_code=409,
+                detail="You are already a member of a team in this competition. Please leave your current team before joining another one."
+            )
+        
         competition = get_competition(comp_id)
         if competition:
             max_members = competition.get("max_members_per_team", 200)
@@ -675,25 +692,53 @@ def api_leave_team(team_id: str, uid: str, current_user: User = Depends(get_curr
     if not team:
         raise HTTPException(status_code=404, detail="Team not found")
     
-    # Check if user is a member
-    if uid not in team.get("members", []):
-        raise HTTPException(status_code=404, detail="User is not a member of this team")
+    # Log team details for debugging
+    logging.info(f"Leave team request: team_id={team_id}, uid={uid}, owner_uid={team.get('owner_uid')}, members={team.get('members', [])}, current_user.uid={current_user.uid}")
     
-    # Cannot leave if user is the owner (optional - you might want to allow this)
-    if team.get("owner_uid") == uid and len(team.get("members", [])) > 1:
+    # Team owner cannot leave their own team (even if only member)
+    if team.get("owner_uid") == uid:
         raise HTTPException(
             status_code=422,
-            detail="Team owner cannot leave. Transfer ownership or delete team first."
+            detail="Team owner cannot leave their own team."
         )
+    
+    # Check if user is a member
+    members = team.get("members", [])
+    if uid not in members:
+        logging.warning(f"User {uid} not found in team members: {members}")
+        raise HTTPException(status_code=404, detail="User is not a member of this team")
     
     # Leave team
     success = leave_team(team_id, uid)
     if not success:
+        # Log for debugging
+        logging.warning(f"Failed to leave team: team_id={team_id}, uid={uid}, members={team.get('members', [])}")
         raise HTTPException(status_code=404, detail="User is not a member of this team")
     
     logging.info(f"User {current_user.email} left team {team_id}")
     
     return {"ok": True}
+
+@app.patch("/teams/{team_id}")
+def api_update_team(team_id: str, body: TeamUpdate, current_user: User = Depends(get_current_user)):
+    """Update team name (only owner can update)"""
+    # Get team details
+    team = get_team(team_id)
+    if not team:
+        raise HTTPException(status_code=404, detail="Team not found")
+    
+    # Verify user is the team owner
+    if team.get("owner_uid") != current_user.uid:
+        raise HTTPException(status_code=403, detail="Only the team owner can update the team name")
+    
+    # Update team name
+    success = update_team(team_id, body.name)
+    if not success:
+        raise HTTPException(status_code=404, detail="Team not found")
+    
+    logging.info(f"User {current_user.email} updated team {team_id} name to {body.name}")
+    
+    return {"ok": True, "team_id": team_id, "name": body.name}
 
 def calculate_competition_status(competition_data: dict, existing_status: str = None) -> str:
     """

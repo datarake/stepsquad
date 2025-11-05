@@ -220,6 +220,16 @@ class ApiClient {
     return this.handleResponse(response);
   }
 
+  async updateTeam(teamId: string, name: string): Promise<{ ok: boolean; team_id: string; name: string }> {
+    const headers = await this.getAuthHeaders();
+    const response = await fetch(`${API_BASE_URL}/teams/${teamId}`, {
+      method: 'PATCH',
+      headers,
+      body: JSON.stringify({ name }),
+    });
+    return this.handleResponse(response);
+  }
+
   // Step Ingestion
   async submitSteps(data: StepIngestRequest): Promise<StepIngestResponse> {
     const headers = await this.getAuthHeaders();
