@@ -92,12 +92,35 @@ jobs:
         env:
           PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
         run: |
+          # Build environment variables string
+          ENV_VARS="GCP_ENABLED=true,GOOGLE_CLOUD_PROJECT=$PROJECT_ID,FIREBASE_PROJECT_ID=stepsquad-46d14,COMP_TZ=Europe/Bucharest,BQ_DATASET=stepsquad,PUBSUB_TOPIC_INGEST=steps.ingest,GRACE_DAYS=2"
+          
+          # Add Fitbit OAuth configuration if available
+          if [ -n "${{ secrets.FITBIT_CLIENT_ID }}" ]; then
+            ENV_VARS="$ENV_VARS,FITBIT_CLIENT_ID=${{ secrets.FITBIT_CLIENT_ID }}"
+            ENV_VARS="$ENV_VARS,FITBIT_CLIENT_SECRET=${{ secrets.FITBIT_CLIENT_SECRET }}"
+            ENV_VARS="$ENV_VARS,FITBIT_REDIRECT_URI=https://api.stepsquad.club/oauth/fitbit/callback"
+            echo "✅ Fitbit OAuth environment variables will be set"
+          else
+            echo "⚠️  Warning: Fitbit OAuth credentials not set - Fitbit integration will not work"
+          fi
+          
+          # Add Garmin OAuth configuration if available
+          if [ -n "${{ secrets.GARMIN_CLIENT_ID }}" ]; then
+            ENV_VARS="$ENV_VARS,GARMIN_CLIENT_ID=${{ secrets.GARMIN_CLIENT_ID }}"
+            ENV_VARS="$ENV_VARS,GARMIN_CLIENT_SECRET=${{ secrets.GARMIN_CLIENT_SECRET }}"
+            ENV_VARS="$ENV_VARS,GARMIN_REDIRECT_URI=https://api.stepsquad.club/oauth/garmin/callback"
+            echo "✅ Garmin OAuth environment variables will be set"
+          else
+            echo "⚠️  Warning: Garmin OAuth credentials not set - Garmin integration will not work"
+          fi
+          
           gcloud run deploy stepsquad-api \
             --image ${{ env.REGION }}-docker.pkg.dev/$PROJECT_ID/${{ env.AR_REPO }}/api:${{ github.sha }} \
             --platform managed \
             --region ${{ env.REGION }} \
             --allow-unauthenticated \
-            --set-env-vars="GCP_ENABLED=true,GOOGLE_CLOUD_PROJECT=$PROJECT_ID,FIREBASE_PROJECT_ID=stepsquad-46d14,COMP_TZ=Europe/Bucharest,BQ_DATASET=stepsquad,PUBSUB_TOPIC_INGEST=steps.ingest,GRACE_DAYS=2" \
+            --set-env-vars="$ENV_VARS" \
             --port 8080 \
             --memory 512Mi \
             --cpu 1
