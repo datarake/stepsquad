@@ -1,9 +1,12 @@
 from __future__ import annotations
 from typing import Dict, Tuple, List, Optional
 import os
+import logging
+from datetime import datetime, date as date_type
 from gcp_clients import fs, bq
 GCP_ENABLED = os.getenv("GCP_ENABLED", "false").lower() == "true"
 BQ_DATASET = os.getenv("BQ_DATASET", "stepsquad")
+logger = logging.getLogger(__name__)
 USERS: Dict[str, dict] = {}
 TEAMS: Dict[str, dict] = {}
 COMPETITIONS: Dict[str, dict] = {}
@@ -165,14 +168,92 @@ def get_all_users() -> list[dict]:
         return [doc.to_dict() for doc in docs]
     return list(USERS.values())
 
+def calculate_competition_status(competition_data: dict, existing_status: str = None) -> str:
+    """
+    Calculate the appropriate competition status based on dates.
+    Automatically updates status based on current date relative to competition dates.
+    """
+    now = datetime.utcnow().date()
+    status = existing_status or competition_data.get('status', 'DRAFT')
+    
+    # Get dates (handle both string and date objects)
+    reg_date_str = competition_data.get('registration_open_date')
+    start_date_str = competition_data.get('start_date')
+    end_date_str = competition_data.get('end_date')
+    
+    if not reg_date_str or not start_date_str or not end_date_str:
+        return status
+    
+    try:
+        # Parse dates - handle both YYYY-MM-DD format and ISO datetime strings
+        def parse_date(date_value):
+            if isinstance(date_value, date_type):
+                return date_value
+            if isinstance(date_value, str):
+                # Try ISO format first (with timezone)
+                try:
+                    return datetime.fromisoformat(date_value.replace('Z', '+00:00')).date()
+                except ValueError:
+                    # Try simple YYYY-MM-DD format
+                    return datetime.strptime(date_value.split('T')[0], '%Y-%m-%d').date()
+            return None
+        
+        reg_date = parse_date(reg_date_str)
+        start_date = parse_date(start_date_str)
+        end_date = parse_date(end_date_str)
+        
+        if not reg_date or not start_date or not end_date:
+            return status
+    except (ValueError, AttributeError, TypeError) as e:
+        # If date parsing fails, return current status
+        logger.warning(f"Failed to parse competition dates: {e}")
+        return status
+    
+    # Auto-update status based on dates
+    # Only auto-update if status is DRAFT, REGISTRATION, or ACTIVE (don't override ENDED or ARCHIVED)
+    if status in ['DRAFT', 'REGISTRATION', 'ACTIVE']:
+        if now >= end_date:
+            return 'ENDED'
+        elif now >= start_date:
+            return 'ACTIVE'
+        elif now >= reg_date:
+            return 'REGISTRATION'
+        else:
+            return 'DRAFT'
+    
+    return status
+
 def get_competition(comp_id: str) -> dict | None:
+    competition = None
     if GCP_ENABLED and _fs_coll("competitions"):
         doc = _fs_coll("competitions").document(comp_id).get()
-        return doc.to_dict() if doc.exists else None
-    return COMPETITIONS.get(comp_id)
+        if doc.exists:
+            competition = doc.to_dict()
+    else:
+        competition = COMPETITIONS.get(comp_id)
+    
+    if not competition:
+        return None
+    
+    # Auto-update status based on current date
+    current_status = competition.get('status')
+    calculated_status = calculate_competition_status(competition, current_status)
+    
+    # If status changed, update it in the database
+    if calculated_status != current_status:
+        competition['status'] = calculated_status
+        if GCP_ENABLED and _fs_coll("competitions"):
+            _fs_coll("competitions").document(comp_id).update({'status': calculated_status})
+        else:
+            COMPETITIONS[comp_id]['status'] = calculated_status
+        logger.info(f"Auto-updated competition {comp_id} status from {current_status} to {calculated_status} based on dates")
+    
+    return competition
 
 def get_competitions(status: Optional[str] = None, tz: Optional[str] = None, search: Optional[str] = None) -> list[dict]:
-    """Get competitions with optional filters"""
+    """Get competitions with optional filters. Automatically updates status based on dates."""
+    competitions = []
+    
     if GCP_ENABLED and _fs_coll("competitions"):
         query = _fs_coll("competitions")
         
@@ -184,36 +265,51 @@ def get_competitions(status: Optional[str] = None, tz: Optional[str] = None, sea
         
         docs = query.order_by("created_at", direction="DESCENDING").stream()
         competitions = [doc.to_dict() for doc in docs]
+    else:
+        # Local storage: sort by created_at desc
+        competitions = list(COMPETITIONS.values())
+        competitions.sort(key=lambda x: x.get("created_at", ""), reverse=True)
         
-        # Apply search if needed (Firestore doesn't support full-text search easily)
-        if search:
-            search_lower = search.lower()
-            competitions = [
-                c for c in competitions
-                if search_lower in c.get("name", "").lower() 
-                or search_lower in c.get("comp_id", "").lower()
-            ]
+        # Apply filters
+        if status:
+            competitions = [c for c in competitions if c.get("status") == status]
+        if tz:
+            competitions = [c for c in competitions if c.get("tz") == tz]
+    
+    # Auto-update status for each competition based on current date
+    updated_competitions = []
+    for competition in competitions:
+        current_status = competition.get('status')
+        calculated_status = calculate_competition_status(competition, current_status)
         
-        return competitions
+        # If status changed, update it in the database
+        if calculated_status != current_status:
+            competition['status'] = calculated_status
+            comp_id = competition.get('comp_id')
+            if comp_id:
+                if GCP_ENABLED and _fs_coll("competitions"):
+                    _fs_coll("competitions").document(comp_id).update({'status': calculated_status})
+                else:
+                    if comp_id in COMPETITIONS:
+                        COMPETITIONS[comp_id]['status'] = calculated_status
+                logger.info(f"Auto-updated competition {comp_id} status from {current_status} to {calculated_status} based on dates")
+        
+        updated_competitions.append(competition)
     
-    # Local storage: sort by created_at desc
-    competitions = list(COMPETITIONS.values())
-    competitions.sort(key=lambda x: x.get("created_at", ""), reverse=True)
-    
-    # Apply filters
-    if status:
-        competitions = [c for c in competitions if c.get("status") == status]
-    if tz:
-        competitions = [c for c in competitions if c.get("tz") == tz]
+    # Apply search filter after status updates
     if search:
         search_lower = search.lower()
-        competitions = [
-            c for c in competitions
+        updated_competitions = [
+            c for c in updated_competitions
             if search_lower in c.get("name", "").lower() 
             or search_lower in c.get("comp_id", "").lower()
         ]
     
-    return competitions
+    # Re-apply status filter after auto-update (in case status changed)
+    if status:
+        updated_competitions = [c for c in updated_competitions if c.get("status") == status]
+    
+    return updated_competitions
 
 def update_competition(comp_id: str, data: dict):
     if GCP_ENABLED and _fs_coll("competitions"):
@@ -232,9 +328,14 @@ def write_daily_steps(uid: str, date: str, steps: int):
     DAILY_STEPS[key] = new_steps
     if GCP_ENABLED and _fs_coll("daily_steps"):
         _fs_coll("daily_steps").document(f"{uid}_{date}").set({"user_id":uid,"date":date,"steps":new_steps}, merge=True)
+        # BigQuery is optional - only write if available and dataset exists
         if bq():
-            table = f"{BQ_DATASET}.fact_daily_steps"
-            bq().insert_rows_json(table, [{"user_id": uid, "date": date, "steps": int(new_steps)}])
+            try:
+                table = f"{BQ_DATASET}.fact_daily_steps"
+                bq().insert_rows_json(table, [{"user_id": uid, "date": date, "steps": int(new_steps)}])
+            except Exception as bq_error:
+                # BigQuery errors are non-fatal - log warning but don't fail
+                logger.warning(f"Failed to write steps to BigQuery (dataset may not exist): {bq_error}")
 
 def get_user_steps(uid: str, comp_id: str | None = None) -> list[dict]:
     """Get user's step history, optionally filtered by competition"""

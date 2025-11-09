@@ -99,8 +99,14 @@ export async function firebaseSignIn(email: string, password: string): Promise<s
       const customError = new Error('No account found with this email address. Please sign up first.');
       (customError as any).code = errorCode;
       throw customError;
-    } else if (errorCode === 'auth/wrong-password' || errorCode === 'auth/invalid-credential') {
+    } else if (errorCode === 'auth/wrong-password') {
       throw new Error('Incorrect password. Please try again.');
+    } else if (errorCode === 'auth/invalid-credential') {
+      // auth/invalid-credential can mean either "user not found" or "wrong password"
+      // We'll let the auth.tsx handle this by trying to sign up
+      const customError = new Error('No account found with this email address. Please sign up first.');
+      (customError as any).code = 'auth/user-not-found';
+      throw customError;
     } else if (errorCode === 'auth/invalid-email') {
       throw new Error('Invalid email address. Please check your email and try again.');
     } else if (errorCode === 'auth/user-disabled') {

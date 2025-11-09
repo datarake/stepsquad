@@ -136,18 +136,37 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           }
         }
         
-        // Only try to sign up if the error is "user not found"
-        // Otherwise, re-throw the original error (wrong password, etc.)
-        if (extractedCode === 'auth/user-not-found' || errorMessage.includes('No account found')) {
+        // Only try to sign up if the error is "user not found" or "invalid credential"
+        // auth/invalid-credential can mean either "user not found" or "wrong password"
+        // We'll try to sign up - if it fails with "email-already-in-use", then the user exists and password was wrong
+        if (extractedCode === 'auth/user-not-found' || extractedCode === 'auth/invalid-credential' || errorMessage.includes('No account found')) {
           try {
             // User doesn't exist, try to create account
             const token = await firebaseSignUp(email, password);
             localStorage.setItem('firebaseToken', token);
             await checkAuth();
           } catch (signUpError: any) {
-            // The sign-up error should already have a user-friendly message from firebaseSignUp
-            // Just re-throw it
-            throw signUpError;
+            // Extract error code from sign-up error
+            const signUpErrorCode = signUpError?.code || '';
+            const signUpErrorMessage = signUpError?.message || '';
+            
+            // Try to extract error code from message if not in error.code
+            let extractedSignUpCode = signUpErrorCode;
+            if (!extractedSignUpCode && signUpErrorMessage) {
+              const match = signUpErrorMessage.match(/\(auth\/([^)]+)\)/);
+              if (match) {
+                extractedSignUpCode = `auth/${match[1]}`;
+              }
+            }
+            
+            // If sign-up fails with "email-already-in-use", then the user exists and password was wrong
+            if (extractedSignUpCode === 'auth/email-already-in-use' || signUpErrorMessage.includes('already registered')) {
+              throw new Error('Incorrect password. Please try again.');
+            } else {
+              // The sign-up error should already have a user-friendly message from firebaseSignUp
+              // Just re-throw it
+              throw signUpError;
+            }
           }
         } else {
           // Re-throw the original error (wrong password, etc.)
