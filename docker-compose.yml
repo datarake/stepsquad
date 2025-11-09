@@ -9,6 +9,12 @@ services:
       GCP_ENABLED: "true"
       GOOGLE_CLOUD_PROJECT: ${GOOGLE_CLOUD_PROJECT:-stepsquad-46d14}
       PORT: "8080"
+      FITBIT_CLIENT_ID: ${FITBIT_CLIENT_ID:-23THXK}
+      FITBIT_CLIENT_SECRET: ${FITBIT_CLIENT_SECRET:-}
+      FITBIT_REDIRECT_URI: ${FITBIT_REDIRECT_URI:-http://localhost:8004/oauth/fitbit/callback}
+      GARMIN_CLIENT_ID: ${GARMIN_CLIENT_ID:-}
+      GARMIN_CLIENT_SECRET: ${GARMIN_CLIENT_SECRET:-}
+      GARMIN_REDIRECT_URI: ${GARMIN_REDIRECT_URI:-http://localhost:8004/oauth/garmin/callback}
     volumes:
       - ${HOME}/.config/gcloud:/root/.config/gcloud:ro
   web:

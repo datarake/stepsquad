@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 # Garmin OAuth configuration
 GARMIN_CLIENT_ID = os.getenv("GARMIN_CLIENT_ID", "")
 GARMIN_CLIENT_SECRET = os.getenv("GARMIN_CLIENT_SECRET", "")
-GARMIN_REDIRECT_URI = os.getenv("GARMIN_REDIRECT_URI", "http://localhost:8080/oauth/garmin/callback")
+GARMIN_REDIRECT_URI = os.getenv("GARMIN_REDIRECT_URI", "http://localhost:8004/oauth/garmin/callback")
 GARMIN_BASE_URL = "https://connectapi.garmin.com"
 
 # Note: Garmin requires Consumer Key and Consumer Secret for OAuth 1.0a
@@ -24,10 +24,10 @@ GARMIN_BASE_URL = "https://connectapi.garmin.com"
 
 
 def generate_state_token(uid: str) -> str:
-    """Generate a secure state token for OAuth"""
+    """Generate a secure state token for OAuth and store it with user UID"""
+    from storage import store_oauth_state_token
     token = secrets.token_urlsafe(32)
-    # Store token temporarily (in memory or cache) with uid mapping
-    # For production, use Redis or similar
+    store_oauth_state_token(token, uid, "garmin")
     return token
 
 

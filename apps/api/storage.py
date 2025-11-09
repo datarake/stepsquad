@@ -10,6 +10,7 @@ COMPETITIONS: Dict[str, dict] = {}
 DAILY_STEPS: Dict[Tuple[str, str], int] = {}
 TEAM_MEMBERS: Dict[str, List[str]] = {}
 IDEMPOTENCY_KEYS: Dict[str, str] = {}  # idempotency_key -> date mapping
+OAUTH_STATE_TOKENS: Dict[str, Dict[str, str]] = {}  # state_token -> {uid, provider} mapping
 def _fs_coll(name: str):
     return fs().collection(name) if fs() else None
 def upsert_user(uid: str, data: dict):
@@ -471,3 +472,24 @@ def team_leaderboard(
         team["rank"] = rank
     
     return result
+
+def store_oauth_state_token(state_token: str, uid: str, provider: str):
+    """Store OAuth state token with user UID and provider"""
+    data = {"uid": uid, "provider": provider}
+    if GCP_ENABLED and _fs_coll("oauth_states"):
+        _fs_coll("oauth_states").document(state_token).set(data)
+    OAUTH_STATE_TOKENS[state_token] = data
+
+def get_oauth_state_token(state_token: str) -> Optional[Dict[str, str]]:
+    """Retrieve OAuth state token data (uid and provider)"""
+    if GCP_ENABLED and _fs_coll("oauth_states"):
+        doc = _fs_coll("oauth_states").document(state_token).get()
+        if doc.exists:
+            data = doc.to_dict()
+            # Delete the token after use (one-time use)
+            _fs_coll("oauth_states").document(state_token).delete()
+            return data
+    if state_token in OAUTH_STATE_TOKENS:
+        data = OAUTH_STATE_TOKENS.pop(state_token)  # Delete after use
+        return data
+    return None

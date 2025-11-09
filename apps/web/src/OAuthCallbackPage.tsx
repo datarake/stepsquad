@@ -40,12 +40,26 @@ export function OAuthCallbackPage() {
         const code = searchParams.get('code');
         const state = searchParams.get('state');
         const error = searchParams.get('error');
+        const status = searchParams.get('status'); // Success status from API redirect
         const oauth_token = searchParams.get('oauth_token'); // For Garmin OAuth 1.0a
         const oauth_verifier = searchParams.get('oauth_verifier'); // For Garmin OAuth 1.0a
 
         // Check for OAuth errors
         if (error) {
           throw new Error(`OAuth error: ${error}`);
+        }
+
+        // If status is success, the API already processed the OAuth and redirected here
+        // Just show success without calling the API again
+        if (status === 'success') {
+          setStatus('success');
+          setMessage(`${currentProvider === 'fitbit' ? 'Fitbit' : 'Garmin'} device connected successfully`);
+          toast.success(`${currentProvider === 'fitbit' ? 'Fitbit' : 'Garmin'} device connected successfully`);
+          localStorage.removeItem('oauth_state');
+          setTimeout(() => {
+            navigate('/devices');
+          }, 2000);
+          return;
         }
 
         // Handle callback based on provider

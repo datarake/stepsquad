@@ -17,15 +17,17 @@ logger = logging.getLogger(__name__)
 # Fitbit OAuth 2.0 configuration
 FITBIT_CLIENT_ID = os.getenv("FITBIT_CLIENT_ID", "")
 FITBIT_CLIENT_SECRET = os.getenv("FITBIT_CLIENT_SECRET", "")
-FITBIT_REDIRECT_URI = os.getenv("FITBIT_REDIRECT_URI", "http://localhost:8080/oauth/fitbit/callback")
+FITBIT_REDIRECT_URI = os.getenv("FITBIT_REDIRECT_URI", "http://localhost:8004/oauth/fitbit/callback")
 FITBIT_BASE_URL = "https://api.fitbit.com"
 FITBIT_AUTH_URL = "https://www.fitbit.com/oauth2/authorize"
 FITBIT_TOKEN_URL = "https://api.fitbit.com/oauth2/token"
 
 
 def generate_state_token(uid: str) -> str:
-    """Generate a secure state token for OAuth"""
+    """Generate a secure state token for OAuth and store it with user UID"""
+    from storage import store_oauth_state_token
     token = secrets.token_urlsafe(32)
+    store_oauth_state_token(token, uid, "fitbit")
     return token
 
 

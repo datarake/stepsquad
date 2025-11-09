@@ -19,7 +19,8 @@ from storage import (
     upsert_user, create_team, update_team, join_team, leave_team, create_competition,
     write_daily_steps, get_user_steps, check_idempotency, is_user_in_team_for_competition,
     individual_leaderboard, team_leaderboard,
-    get_user, get_all_users, get_team, get_teams, get_competition, get_competitions, update_competition, delete_competition
+    get_user, get_all_users, get_team, get_teams, get_competition, get_competitions, update_competition, delete_competition,
+    get_oauth_state_token
 )
 from pubsub_bus import publish_ingest
 from firebase_auth import verify_id_token, get_user_info_from_token
@@ -924,7 +925,7 @@ async def garmin_callback(
     state: Optional[str] = Query(None),
     oauth_token: Optional[str] = Query(None),  # OAuth 1.0a request token
     oauth_verifier: Optional[str] = Query(None),  # OAuth 1.0a verifier
-    current_user: User = Depends(get_current_user)
+    error: Optional[str] = Query(None),
 ):
     """
     Handle Garmin OAuth callback
@@ -932,11 +933,26 @@ async def garmin_callback(
     Garmin uses OAuth 1.0a, which has a different flow:
     1. Request token → 2. Authorization → 3. Access token
     
-    This endpoint handles step 2 (authorization) and 3 (access token)
+    This endpoint handles step 2 (authorization) and 3 (access token).
+    This endpoint doesn't require authentication because Garmin redirects here
+    without auth headers. We identify the user from the state token.
     """
     try:
+        # Check for OAuth errors
+        if error:
+            raise HTTPException(status_code=400, detail=f"Garmin OAuth error: {error}")
+        
         if not state:
             raise HTTPException(status_code=400, detail="State parameter required")
+        
+        # Look up user from state token
+        state_data = get_oauth_state_token(state)
+        if not state_data:
+            raise HTTPException(status_code=400, detail="Invalid or expired state token")
+        
+        uid = state_data.get("uid")
+        if not uid:
+            raise HTTPException(status_code=400, detail="User not found in state token")
         
         # Exchange authorization for access token
         # Garmin uses OAuth 1.0a, so we need oauth_token and oauth_verifier
@@ -950,16 +966,34 @@ async def garmin_callback(
             raise HTTPException(status_code=400, detail="OAuth parameters missing")
         
         # Store tokens for user
-        store_device_tokens(current_user.uid, "garmin", tokens)
+        store_device_tokens(uid, "garmin", tokens)
         
-        logging.info(f"User {current_user.email} linked Garmin device")
+        # Get user info for logging
+        user = get_user(uid)
+        email = user.get("email", "unknown") if user else "unknown"
+        logging.info(f"User {email} (uid: {uid}) linked Garmin device")
         
-        return {
-            "status": "success",
-            "provider": "garmin",
-            "message": "Garmin device linked successfully"
-        }
+        # Return HTML page that redirects to frontend
+        frontend_url = os.getenv("VITE_WEB_URL", "https://stepsquad.club")
+        # Build redirect URL with all OAuth parameters
+        redirect_params = []
+        if code:
+            redirect_params.append(f"code={code}")
+        if state:
+            redirect_params.append(f"state={state}")
+        if oauth_token:
+            redirect_params.append(f"oauth_token={oauth_token}")
+        if oauth_verifier:
+            redirect_params.append(f"oauth_verifier={oauth_verifier}")
+        redirect_params.append("status=success")
+        
+        return RedirectResponse(
+            url=f"{frontend_url}/oauth/garmin/callback?{'&'.join(redirect_params)}",
+            status_code=302
+        )
     
+    except HTTPException:
+        raise
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
@@ -999,12 +1033,13 @@ async def fitbit_callback(
     code: Optional[str] = Query(None),
     state: Optional[str] = Query(None),
     error: Optional[str] = Query(None),
-    current_user: User = Depends(get_current_user)
 ):
     """
     Handle Fitbit OAuth 2.0 callback
     
-    Fitbit uses OAuth 2.0 authorization code flow
+    Fitbit uses OAuth 2.0 authorization code flow.
+    This endpoint doesn't require authentication because Fitbit redirects here
+    without auth headers. We identify the user from the state token.
     """
     try:
         # Check for OAuth errors
@@ -1017,20 +1052,35 @@ async def fitbit_callback(
         if not state:
             raise HTTPException(status_code=400, detail="State parameter required")
         
+        # Look up user from state token
+        state_data = get_oauth_state_token(state)
+        if not state_data:
+            raise HTTPException(status_code=400, detail="Invalid or expired state token")
+        
+        uid = state_data.get("uid")
+        if not uid:
+            raise HTTPException(status_code=400, detail="User not found in state token")
+        
         # Exchange authorization code for access token
         tokens = exchange_fitbit_code(code)
         
         # Store tokens for user
-        store_device_tokens(current_user.uid, "fitbit", tokens)
+        store_device_tokens(uid, "fitbit", tokens)
         
-        logging.info(f"User {current_user.email} linked Fitbit device")
+        # Get user info for logging
+        user = get_user(uid)
+        email = user.get("email", "unknown") if user else "unknown"
+        logging.info(f"User {email} (uid: {uid}) linked Fitbit device")
         
-        return {
-            "status": "success",
-            "provider": "fitbit",
-            "message": "Fitbit device linked successfully"
-        }
+        # Return HTML page that redirects to frontend
+        frontend_url = os.getenv("VITE_WEB_URL", "https://stepsquad.club")
+        return RedirectResponse(
+            url=f"{frontend_url}/oauth/fitbit/callback?code={code}&state={state}&status=success",
+            status_code=302
+        )
     
+    except HTTPException:
+        raise
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
