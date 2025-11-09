@@ -6,11 +6,13 @@ import { Device, DeviceSyncResponse } from './types';
 import { Activity, Trash2, RefreshCw, Link2, AlertCircle } from 'lucide-react';
 import { useConfirmDialog } from './useConfirmDialog';
 import { ConfirmDialog } from './ConfirmDialog';
+import { InfoDialog } from './InfoDialog';
 
 export function DeviceSettingsPage() {
   const queryClient = useQueryClient();
   const [syncing, setSyncing] = useState<string | null>(null);
   const { confirm, dialogState } = useConfirmDialog();
+  const [showGarminInfo, setShowGarminInfo] = useState(false);
 
   // Fetch devices
   const { data: devicesData, isLoading, error, refetch } = useQuery({
@@ -49,16 +51,10 @@ export function DeviceSettingsPage() {
   });
 
   // Connect device handlers
-  const handleConnectGarmin = async () => {
-    try {
-      const { authorization_url } = await apiClient.getGarminAuthUrl();
-      // Store state in localStorage for callback verification
-      window.localStorage.setItem('oauth_state', 'garmin');
-      // Redirect to Garmin OAuth
-      window.location.href = authorization_url;
-    } catch (error: any) {
-      toast.error(`Failed to connect Garmin: ${error.message}`);
-    }
+  const handleConnectGarmin = () => {
+    // Show info dialog instead of connecting
+    // Garmin Connect integration is pending developer program approval
+    setShowGarminInfo(true);
   };
 
   const handleConnectFitbit = async () => {
@@ -309,6 +305,19 @@ export function DeviceSettingsPage() {
           onCancel={dialogState.onCancel}
         />
       )}
+
+      {/* Garmin Info Dialog */}
+      <InfoDialog
+        isOpen={showGarminInfo}
+        title="Garmin Connect Coming Soon"
+        message={`Garmin Connect integration is currently not available as we are awaiting approval from the Garmin Connect Developer Program.
+
+We're working on bringing Garmin device support to StepSquad and will enable this feature as soon as we receive approval.
+
+In the meantime, you can connect your Fitbit device to sync your step data.`}
+        onClose={() => setShowGarminInfo(false)}
+        closeText="Got it"
+      />
     </div>
   );
 }
