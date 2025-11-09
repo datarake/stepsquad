@@ -119,7 +119,7 @@ export interface LeaderboardResponse {
 
 // Device Integration Types
 export interface Device {
-  provider: "garmin" | "fitbit";
+  provider: "garmin" | "fitbit" | "virtual";
   linked_at: string;
   last_sync: string | null;
   sync_enabled: boolean;
@@ -133,18 +133,18 @@ export interface DeviceListResponse {
 export interface OAuthAuthorizeResponse {
   authorization_url: string;
   state: string;
-  provider: "garmin" | "fitbit";
+  provider: "garmin" | "fitbit" | "virtual";
 }
 
 export interface OAuthCallbackResponse {
   status: "success" | "error";
-  provider: "garmin" | "fitbit";
+  provider: "garmin" | "fitbit" | "virtual";
   message: string;
 }
 
 export interface DeviceSyncResponse {
   status: "success" | "error";
-  provider: "garmin" | "fitbit";
+  provider: "garmin" | "fitbit" | "virtual";
   date: string;
   steps: number;
   competitions: Array<{
@@ -160,6 +160,11 @@ export interface DeviceSyncResponse {
 
 export interface DeviceUnlinkResponse {
   status: "success" | "error";
-  provider: "garmin" | "fitbit";
+  provider: "garmin" | "fitbit" | "virtual";
   message: string;
+}
+
+export interface VirtualDeviceSyncRequest {
+  steps: number;
+  date?: string;
 }

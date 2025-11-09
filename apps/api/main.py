@@ -20,7 +20,7 @@ from storage import (
     write_daily_steps, get_user_steps, check_idempotency, is_user_in_team_for_competition,
     individual_leaderboard, team_leaderboard,
     get_user, get_all_users, get_team, get_teams, get_competition, get_competitions, update_competition, delete_competition,
-    get_oauth_state_token
+    get_oauth_state_token, calculate_competition_status
 )
 from pubsub_bus import publish_ingest
 from firebase_auth import verify_id_token, get_user_info_from_token
@@ -77,6 +77,10 @@ class TeamJoin(BaseModel):
 
 class TeamUpdate(BaseModel):
     name: str = Field(min_length=1, max_length=50)
+
+class VirtualDeviceSync(BaseModel):
+    steps: int = Field(ge=0, le=100000, description="Number of steps to generate (0-100,000)")
+    date: Optional[str] = Field(None, description="Date to sync steps for (YYYY-MM-DD), defaults to today")
 
 class CompetitionCreate(BaseModel):
     comp_id: str
@@ -741,61 +745,6 @@ def api_update_team(team_id: str, body: TeamUpdate, current_user: User = Depends
     
     return {"ok": True, "team_id": team_id, "name": body.name}
 
-def calculate_competition_status(competition_data: dict, existing_status: str = None) -> str:
-    """
-    Calculate the appropriate competition status based on dates.
-    Automatically updates status based on current date relative to competition dates.
-    """
-    now = datetime.utcnow().date()
-    status = existing_status or competition_data.get('status', 'DRAFT')
-    
-    # Get dates (handle both string and date objects)
-    reg_date_str = competition_data.get('registration_open_date')
-    start_date_str = competition_data.get('start_date')
-    end_date_str = competition_data.get('end_date')
-    
-    if not reg_date_str or not start_date_str or not end_date_str:
-        return status
-    
-    try:
-        # Parse dates - handle both YYYY-MM-DD format and ISO datetime strings
-        def parse_date(date_value):
-            if isinstance(date_value, date_type):
-                return date_value
-            if isinstance(date_value, str):
-                # Try ISO format first (with timezone)
-                try:
-                    return datetime.fromisoformat(date_value.replace('Z', '+00:00')).date()
-                except ValueError:
-                    # Try simple YYYY-MM-DD format
-                    return datetime.strptime(date_value.split('T')[0], '%Y-%m-%d').date()
-            return None
-        
-        reg_date = parse_date(reg_date_str)
-        start_date = parse_date(start_date_str)
-        end_date = parse_date(end_date_str)
-        
-        if not reg_date or not start_date or not end_date:
-            return status
-    except (ValueError, AttributeError, TypeError) as e:
-        # If date parsing fails, return current status
-        logging.warning(f"Failed to parse competition dates: {e}")
-        return status
-    
-    # Auto-update status based on dates
-    # Only auto-update if status is DRAFT, REGISTRATION, or ACTIVE (don't override ENDED or ARCHIVED)
-    if status in ['DRAFT', 'REGISTRATION', 'ACTIVE']:
-        if now >= end_date:
-            return 'ENDED'
-        elif now >= start_date:
-            return 'ACTIVE'
-        elif now >= reg_date:
-            return 'REGISTRATION'
-        else:
-            return 'DRAFT'
-    
-    return status
-
 @app.post("/competitions")
 def api_create_competition(body: CompetitionCreate, current_user: User = Depends(get_current_user)):
     if current_user.role != "ADMIN":
@@ -1149,6 +1098,178 @@ async def list_devices(current_user: User = Depends(get_current_user)):
         raise HTTPException(status_code=500, detail="Failed to list devices")
 
 
+@app.post("/devices/virtual/connect")
+async def connect_virtual_device(
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Connect virtual step generator device
+    
+    This is a demo/simulator device for hackathon demonstrations.
+    No OAuth tokens needed - just stores device connection status.
+    """
+    try:
+        # Check if user already has a device connected (only one device allowed)
+        existing_devices = get_user_devices(current_user.uid)
+        if existing_devices:
+            existing_provider = existing_devices[0].get("provider")
+            raise HTTPException(
+                status_code=400,
+                detail=f"You already have a {existing_provider} device connected. Only one device can be connected at a time. Please unlink your {existing_provider} device first."
+            )
+        
+        # Store virtual device (no tokens needed)
+        store_device_tokens(current_user.uid, "virtual", None)
+        
+        logging.info(f"User {current_user.email} connected virtual device")
+        
+        return {
+            "status": "success",
+            "provider": "virtual",
+            "message": "Virtual step generator connected successfully"
+        }
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        logging.error(f"Error connecting virtual device: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to connect virtual device")
+
+
+@app.post("/devices/virtual/sync")
+async def sync_virtual_device(
+    sync_data: VirtualDeviceSync,
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Generate and sync steps from virtual device
+    
+    Generates steps (either provided or random) and syncs them to all active competitions.
+    """
+    try:
+        # Check if virtual device is linked
+        device_data = get_device_tokens(current_user.uid, "virtual")
+        
+        if not device_data:
+            raise HTTPException(status_code=404, detail="Virtual device not connected")
+        
+        # Determine date to sync
+        if sync_data.date:
+            try:
+                sync_date = datetime.strptime(sync_data.date, "%Y-%m-%d").date()
+            except ValueError:
+                raise HTTPException(status_code=400, detail="Invalid date format. Use YYYY-MM-DD")
+        else:
+            sync_date = datetime.now().date()
+        
+        # Use provided steps
+        steps = sync_data.steps
+        
+        # Find user's active competitions and sync steps to each
+        all_competitions = get_competitions()
+        user_competitions = []
+        
+        for competition in all_competitions:
+            comp_id = competition.get("comp_id")
+            if not comp_id:
+                continue
+            
+            # Check if competition is ACTIVE
+            if competition.get("status") != "ACTIVE":
+                continue
+            
+            # Check if user is in a team for this competition
+            if not is_user_in_team_for_competition(current_user.uid, comp_id):
+                continue
+            
+            # Check if date is within competition range (with grace days)
+            try:
+                comp_start = datetime.strptime(competition.get("start_date"), "%Y-%m-%d").date()
+                comp_end = datetime.strptime(competition.get("end_date"), "%Y-%m-%d").date()
+                grace_end = comp_end + timedelta(days=GRACE_DAYS)
+                
+                if comp_start <= sync_date <= grace_end:
+                    user_competitions.append(comp_id)
+            except (ValueError, KeyError) as e:
+                logging.warning(f"Error checking date range for competition {comp_id}: {e}")
+                continue
+        
+        # Submit steps to each active competition
+        # For virtual device, we allow overwriting steps (useful for demo/testing)
+        submissions = []
+        for comp_id in user_competitions:
+            try:
+                # For virtual device, always write steps (allow overwriting for demo purposes)
+                # Generate a unique idempotency key with timestamp to allow re-generation
+                idempotency_key = f"virtual_{sync_date.isoformat()}_{current_user.uid}_{comp_id}_{datetime.utcnow().isoformat()}"
+                
+                # Write steps for this competition (will overwrite if they exist)
+                write_daily_steps(current_user.uid, sync_date.isoformat(), steps)
+                
+                # Publish to Pub/Sub
+                try:
+                    publish_ingest({
+                        "user_id": current_user.uid,
+                        "comp_id": comp_id,
+                        "date": sync_date.isoformat(),
+                        "steps": steps,
+                        "provider": "virtual",
+                        "tz": COMP_TZ,
+                        "source_ts": datetime.utcnow().isoformat(),
+                        "idempotency_key": idempotency_key,
+                    })
+                except Exception as pubsub_error:
+                    logging.warning(f"Failed to publish step ingestion event to Pub/Sub: {pubsub_error}")
+                
+                submissions.append({
+                    "comp_id": comp_id,
+                    "status": "submitted",
+                    "steps": steps
+                })
+            except Exception as e:
+                logging.warning(f"Failed to submit steps to competition {comp_id}: {e}")
+                submissions.append({
+                    "comp_id": comp_id,
+                    "status": "error",
+                    "error": str(e)
+                })
+        
+        # Update sync time
+        update_device_sync_time(current_user.uid, "virtual")
+        
+        submitted_count = len([s for s in submissions if s.get("status") == "submitted"])
+        logging.info(f"User {current_user.email} synced {steps} steps from virtual device for {sync_date}, submitted to {submitted_count} competition(s) out of {len(user_competitions)} found")
+        
+        # If no competitions found, provide helpful message
+        if len(user_competitions) == 0:
+            logging.warning(f"User {current_user.email} has no active competitions with team membership for date {sync_date}")
+            return {
+                "status": "warning",
+                "provider": "virtual",
+                "date": sync_date.isoformat(),
+                "steps": steps,
+                "competitions": [],
+                "submitted_count": 0,
+                "message": f"No active competitions found where you are a team member. Make sure you're in a team and the competition is ACTIVE, and the date ({sync_date.isoformat()}) is within the competition date range."
+            }
+        
+        return {
+            "status": "success",
+            "provider": "virtual",
+            "date": sync_date.isoformat(),
+            "steps": steps,
+            "competitions": submissions,
+            "submitted_count": submitted_count,
+            "message": f"Generated and synced {steps} steps to {submitted_count} competition(s)"
+        }
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        logging.error(f"Error syncing virtual device: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to sync virtual device: {str(e)}")
+
+
 @app.post("/devices/{provider}/sync")
 async def sync_device(
     provider: str,
@@ -1292,12 +1413,12 @@ async def unlink_device(
     current_user: User = Depends(get_current_user)
 ):
     """
-    Unlink a device (remove stored OAuth tokens)
+    Unlink a device (remove stored OAuth tokens or virtual device)
     
-    User can unlink their Garmin or Fitbit device
+    User can unlink their Garmin, Fitbit, or virtual device
     """
-    if provider not in ["garmin", "fitbit"]:
-        raise HTTPException(status_code=400, detail=f"Invalid provider: {provider}. Supported: garmin, fitbit")
+    if provider not in ["garmin", "fitbit", "virtual"]:
+        raise HTTPException(status_code=400, detail=f"Invalid provider: {provider}. Supported: garmin, fitbit, virtual")
     
     try:
         # Check if device is linked

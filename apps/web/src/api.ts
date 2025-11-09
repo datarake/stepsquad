@@ -1,4 +1,4 @@
-import { User, Competition, CompetitionCreateRequest, CompetitionUpdateRequest, ApiError, Team, TeamCreateRequest, TeamJoinRequest, StepIngestRequest, StepIngestResponse, StepHistoryResponse, LeaderboardResponse, DeviceListResponse, OAuthAuthorizeResponse, OAuthCallbackResponse, DeviceSyncResponse, DeviceUnlinkResponse } from './types';
+import { User, Competition, CompetitionCreateRequest, CompetitionUpdateRequest, ApiError, Team, TeamCreateRequest, TeamJoinRequest, StepIngestRequest, StepIngestResponse, StepHistoryResponse, LeaderboardResponse, DeviceListResponse, OAuthAuthorizeResponse, OAuthCallbackResponse, DeviceSyncResponse, DeviceUnlinkResponse, VirtualDeviceSyncRequest } from './types';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080';
 const USE_DEV_AUTH = import.meta.env.VITE_USE_DEV_AUTH === 'true';
@@ -367,11 +367,30 @@ class ApiClient {
     return this.handleResponse(response);
   }
 
-  async unlinkDevice(provider: "garmin" | "fitbit"): Promise<DeviceUnlinkResponse> {
+  async unlinkDevice(provider: "garmin" | "fitbit" | "virtual"): Promise<DeviceUnlinkResponse> {
     const headers = await this.getAuthHeaders();
     const response = await fetch(`${API_BASE_URL}/devices/${provider}`, {
       method: 'DELETE',
       headers,
+    });
+    return this.handleResponse(response);
+  }
+
+  async connectVirtualDevice(): Promise<OAuthCallbackResponse> {
+    const headers = await this.getAuthHeaders();
+    const response = await fetch(`${API_BASE_URL}/devices/virtual/connect`, {
+      method: 'POST',
+      headers,
+    });
+    return this.handleResponse(response);
+  }
+
+  async syncVirtualDevice(data: VirtualDeviceSyncRequest): Promise<DeviceSyncResponse> {
+    const headers = await this.getAuthHeaders();
+    const response = await fetch(`${API_BASE_URL}/devices/virtual/sync`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(data),
     });
     return this.handleResponse(response);
   }

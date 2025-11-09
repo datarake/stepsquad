@@ -23,14 +23,15 @@ def _fs_coll(name: str):
     return fs().collection(name) if fs() and GCP_ENABLED else None
 
 
-def store_device_tokens(uid: str, provider: str, tokens: Dict[str, Any]) -> Dict[str, Any]:
+def store_device_tokens(uid: str, provider: str, tokens: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     """
-    Store OAuth tokens for a user's device
+    Store OAuth tokens for a user's device (or connect virtual device)
     
     Args:
         uid: User ID
-        provider: Provider name ("garmin" or "fitbit")
+        provider: Provider name ("garmin", "fitbit", or "virtual")
         tokens: OAuth token data (access_token, refresh_token, expires_at, etc.)
+               For virtual devices, tokens can be None
     
     Returns:
         Stored device data
@@ -38,7 +39,7 @@ def store_device_tokens(uid: str, provider: str, tokens: Dict[str, Any]) -> Dict
     device_data = {
         "uid": uid,
         "provider": provider,
-        "tokens": tokens,
+        "tokens": tokens if tokens else {},  # Empty dict for virtual devices
         "linked_at": datetime.utcnow().isoformat(),
         "last_sync": None,
         "sync_enabled": True,
@@ -51,13 +52,13 @@ def store_device_tokens(uid: str, provider: str, tokens: Dict[str, Any]) -> Dict
         # Note: In production, encrypt tokens before storing
         doc_ref = _fs_coll("device_tokens").document(device_id)
         doc_ref.set(device_data, merge=True)
-        logger.info(f"Stored {provider} tokens for user {uid} in Firestore")
+        logger.info(f"Stored {provider} device for user {uid} in Firestore")
     else:
         # Local storage
         if uid not in DEVICE_TOKENS:
             DEVICE_TOKENS[uid] = {}
         DEVICE_TOKENS[uid][provider] = device_data
-        logger.info(f"Stored {provider} tokens for user {uid} in memory")
+        logger.info(f"Stored {provider} device for user {uid} in memory")
     
     return device_data
 

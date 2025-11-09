@@ -2,17 +2,19 @@ import React, { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'react-hot-toast';
 import { apiClient } from './api';
-import { Device, DeviceSyncResponse } from './types';
-import { Activity, Trash2, RefreshCw, Link2, AlertCircle } from 'lucide-react';
+import { Device, DeviceSyncResponse, VirtualDeviceSyncRequest } from './types';
+import { Activity, Trash2, RefreshCw, Link2, AlertCircle, Zap } from 'lucide-react';
 import { useConfirmDialog } from './useConfirmDialog';
 import { ConfirmDialog } from './ConfirmDialog';
 import { InfoDialog } from './InfoDialog';
+import { VirtualStepGenerator } from './VirtualStepGenerator';
 
 export function DeviceSettingsPage() {
   const queryClient = useQueryClient();
   const [syncing, setSyncing] = useState<string | null>(null);
   const { confirm, dialogState } = useConfirmDialog();
   const [showGarminInfo, setShowGarminInfo] = useState(false);
+  const [showVirtualGenerator, setShowVirtualGenerator] = useState(false);
 
   // Fetch devices
   const { data: devicesData, isLoading, error, refetch } = useQuery({
@@ -22,7 +24,7 @@ export function DeviceSettingsPage() {
 
   // Unlink device mutation
   const unlinkMutation = useMutation({
-    mutationFn: (provider: "garmin" | "fitbit") => apiClient.unlinkDevice(provider),
+    mutationFn: (provider: "garmin" | "fitbit" | "virtual") => apiClient.unlinkDevice(provider),
     onSuccess: (data, provider) => {
       toast.success(`${provider.charAt(0).toUpperCase() + provider.slice(1)} device unlinked successfully`);
       queryClient.invalidateQueries({ queryKey: ['devices'] });
@@ -50,6 +52,39 @@ export function DeviceSettingsPage() {
     },
   });
 
+  // Connect virtual device mutation
+  const connectVirtualMutation = useMutation({
+    mutationFn: () => apiClient.connectVirtualDevice(),
+    onSuccess: () => {
+      toast.success('Virtual step generator connected successfully');
+      queryClient.invalidateQueries({ queryKey: ['devices'] });
+    },
+    onError: (error: Error) => {
+      toast.error(`Failed to connect virtual device: ${error.message}`);
+    },
+  });
+
+  // Sync virtual device mutation
+  const syncVirtualMutation = useMutation({
+    mutationFn: (data: VirtualDeviceSyncRequest) => apiClient.syncVirtualDevice(data),
+    onSuccess: (data: DeviceSyncResponse) => {
+      const { steps, submitted_count, message, status } = data;
+      if (status === 'warning' || submitted_count === 0) {
+        toast.error(message || 'No active competitions found where you are a team member. Make sure you\'re in a team and the competition is ACTIVE.');
+      } else {
+        toast.success(`Generated and synced ${steps} steps. ${message}`);
+        queryClient.invalidateQueries({ queryKey: ['devices'] });
+        queryClient.invalidateQueries({ queryKey: ['user-steps'] });
+        queryClient.invalidateQueries({ queryKey: ['individual-leaderboard'] });
+        queryClient.invalidateQueries({ queryKey: ['team-leaderboard'] });
+      }
+      setShowVirtualGenerator(false);
+    },
+    onError: (error: Error) => {
+      toast.error(`Failed to sync virtual device: ${error.message}`);
+    },
+  });
+
   // Connect device handlers
   const handleConnectGarmin = () => {
     // Show info dialog instead of connecting
@@ -69,12 +104,24 @@ export function DeviceSettingsPage() {
     }
   };
 
-  const handleSync = async (provider: "garmin" | "fitbit") => {
-    setSyncing(provider);
-    syncMutation.mutate({ provider });
+  const handleConnectVirtual = async () => {
+    connectVirtualMutation.mutate();
   };
 
-  const handleUnlink = async (provider: "garmin" | "fitbit") => {
+  const handleSync = async (provider: "garmin" | "fitbit" | "virtual") => {
+    if (provider === "virtual") {
+      setShowVirtualGenerator(true);
+    } else {
+      setSyncing(provider);
+      syncMutation.mutate({ provider });
+    }
+  };
+
+  const handleGenerateSteps = async (data: VirtualDeviceSyncRequest) => {
+    await syncVirtualMutation.mutateAsync(data);
+  };
+
+  const handleUnlink = async (provider: "garmin" | "fitbit" | "virtual") => {
     const confirmed = await confirm({
       title: 'Unlink Device',
       message: `Are you sure you want to unlink your ${provider.charAt(0).toUpperCase() + provider.slice(1)} device? You will need to reconnect it to sync steps again.`,
@@ -94,6 +141,7 @@ export function DeviceSettingsPage() {
   const linkedProviders = devices.map(d => d.provider);
   const hasGarmin = linkedProviders.includes('garmin');
   const hasFitbit = linkedProviders.includes('fitbit');
+  const hasVirtual = linkedProviders.includes('virtual');
 
   if (isLoading) {
     return (
@@ -138,12 +186,22 @@ export function DeviceSettingsPage() {
               >
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-4">
-                    <div className="flex items-center justify-center w-12 h-12 bg-blue-100 rounded-lg">
-                      <Activity className="h-6 w-6 text-blue-600" />
+                    <div className={`flex items-center justify-center w-12 h-12 rounded-lg ${
+                      device.provider === 'virtual' ? 'bg-purple-100' :
+                      device.provider === 'garmin' ? 'bg-orange-100' :
+                      'bg-blue-100'
+                    }`}>
+                      {device.provider === 'virtual' ? (
+                        <Zap className="h-6 w-6 text-purple-600" />
+                      ) : (
+                        <Activity className={`h-6 w-6 ${
+                          device.provider === 'garmin' ? 'text-orange-600' : 'text-blue-600'
+                        }`} />
+                      )}
                     </div>
                     <div>
                       <h3 className="font-semibold text-gray-900 capitalize">
-                        {device.provider}
+                        {device.provider === 'virtual' ? 'Virtual Step Generator' : device.provider}
                       </h3>
                       <div className="text-sm text-gray-600">
                         <p>Linked: {new Date(device.linked_at).toLocaleDateString()}</p>
@@ -157,18 +215,35 @@ export function DeviceSettingsPage() {
                   <div className="flex items-center gap-2">
                     <button
                       onClick={() => handleSync(device.provider)}
-                      disabled={syncing === device.provider || syncMutation.isPending}
-                      className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                      disabled={
+                        (device.provider !== 'virtual' && (syncing === device.provider || syncMutation.isPending)) ||
+                        (device.provider === 'virtual' && syncVirtualMutation.isPending)
+                      }
+                      className={`px-4 py-2 text-white rounded-lg disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 ${
+                        device.provider === 'virtual' 
+                          ? 'bg-purple-600 hover:bg-purple-700' 
+                          : 'bg-blue-600 hover:bg-blue-700'
+                      }`}
                     >
-                      {syncing === device.provider ? (
+                      {(device.provider !== 'virtual' && syncing === device.provider) || 
+                       (device.provider === 'virtual' && syncVirtualMutation.isPending) ? (
                         <>
                           <RefreshCw className="h-4 w-4 animate-spin" />
-                          Syncing...
+                          {device.provider === 'virtual' ? 'Generating...' : 'Syncing...'}
                         </>
                       ) : (
                         <>
-                          <RefreshCw className="h-4 w-4" />
-                          Sync Now
+                          {device.provider === 'virtual' ? (
+                            <>
+                              <Zap className="h-4 w-4" />
+                              Generate Steps
+                            </>
+                          ) : (
+                            <>
+                              <RefreshCw className="h-4 w-4" />
+                              Sync Now
+                            </>
+                          )}
                         </>
                       )}
                     </button>
@@ -208,7 +283,7 @@ export function DeviceSettingsPage() {
                 <Link2 className="h-4 w-4" />
                 Connected
               </div>
-            ) : hasFitbit ? (
+            ) : (hasFitbit || hasVirtual) ? (
               <div className="space-y-2">
                 <button
                   disabled
@@ -219,7 +294,7 @@ export function DeviceSettingsPage() {
                 </button>
                 <div className="text-xs text-amber-700 bg-amber-100 border border-amber-200 rounded p-2 flex items-start gap-2">
                   <AlertCircle className="h-4 w-4 mt-0.5 flex-shrink-0" />
-                  <span>Only one device can be connected at a time. Please unlink your Fitbit device first to connect Garmin.</span>
+                  <span>Only one device can be connected at a time. Please unlink your {hasFitbit ? 'Fitbit' : 'Virtual'} device first to connect Garmin.</span>
                 </div>
               </div>
             ) : (
@@ -249,7 +324,7 @@ export function DeviceSettingsPage() {
                 <Link2 className="h-4 w-4" />
                 Connected
               </div>
-            ) : hasGarmin ? (
+            ) : (hasGarmin || hasVirtual) ? (
               <div className="space-y-2">
                 <button
                   disabled
@@ -260,7 +335,7 @@ export function DeviceSettingsPage() {
                 </button>
                 <div className="text-xs text-amber-700 bg-amber-100 border border-amber-200 rounded p-2 flex items-start gap-2">
                   <AlertCircle className="h-4 w-4 mt-0.5 flex-shrink-0" />
-                  <span>Only one device can be connected at a time. Please unlink your Garmin device first to connect Fitbit.</span>
+                  <span>Only one device can be connected at a time. Please unlink your {hasGarmin ? 'Garmin' : 'Virtual'} device first to connect Fitbit.</span>
                 </div>
               </div>
             ) : (
@@ -270,6 +345,48 @@ export function DeviceSettingsPage() {
               >
                 <Link2 className="h-4 w-4" />
                 Connect Fitbit
+              </button>
+            )}
+          </div>
+
+          {/* Virtual Step Generator */}
+          <div className={`bg-white border rounded-lg p-6 shadow-sm ${(hasGarmin || hasFitbit) && !hasVirtual ? 'border-amber-300 bg-amber-50' : 'border-gray-200'}`}>
+            <div className="flex items-center gap-4 mb-4">
+              <div className="flex items-center justify-center w-12 h-12 bg-purple-100 rounded-lg">
+                <Zap className="h-6 w-6 text-purple-600" />
+              </div>
+              <div>
+                <h3 className="font-semibold text-gray-900">Virtual Step Generator</h3>
+                <p className="text-sm text-gray-600">Demo device for hackathon</p>
+              </div>
+            </div>
+            {hasVirtual ? (
+              <div className="text-sm text-green-600 font-medium flex items-center gap-2">
+                <Link2 className="h-4 w-4" />
+                Connected
+              </div>
+            ) : (hasGarmin || hasFitbit) ? (
+              <div className="space-y-2">
+                <button
+                  disabled
+                  className="w-full px-4 py-2 bg-gray-300 text-gray-500 rounded-lg cursor-not-allowed flex items-center justify-center gap-2"
+                >
+                  <Link2 className="h-4 w-4" />
+                  Connect Virtual
+                </button>
+                <div className="text-xs text-amber-700 bg-amber-100 border border-amber-200 rounded p-2 flex items-start gap-2">
+                  <AlertCircle className="h-4 w-4 mt-0.5 flex-shrink-0" />
+                  <span>Only one device can be connected at a time. Please unlink your {hasGarmin ? 'Garmin' : 'Fitbit'} device first to connect Virtual Step Generator.</span>
+                </div>
+              </div>
+            ) : (
+              <button
+                onClick={handleConnectVirtual}
+                disabled={connectVirtualMutation.isPending}
+                className="w-full px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              >
+                <Link2 className="h-4 w-4" />
+                {connectVirtualMutation.isPending ? 'Connecting...' : 'Connect Virtual'}
               </button>
             )}
           </div>
@@ -314,9 +431,17 @@ export function DeviceSettingsPage() {
 
 We're working on bringing Garmin device support to StepSquad and will enable this feature as soon as we receive approval.
 
-In the meantime, you can connect your Fitbit device to sync your step data.`}
+In the meantime, you can connect your Fitbit device or use the Virtual Step Generator to sync your step data.`}
         onClose={() => setShowGarminInfo(false)}
         closeText="Got it"
+      />
+
+      {/* Virtual Step Generator Dialog */}
+      <VirtualStepGenerator
+        isOpen={showVirtualGenerator}
+        onClose={() => setShowVirtualGenerator(false)}
+        onGenerate={handleGenerateSteps}
+        isGenerating={syncVirtualMutation.isPending}
       />
     </div>
   );
