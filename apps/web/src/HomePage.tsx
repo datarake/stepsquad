@@ -48,7 +48,7 @@ export function HomePage() {
   const resetAndSeedMutation = useMutation({
     mutationFn: () => apiClient.resetAndSeedDemoData(),
     onSuccess: (data) => {
-      toast.success(`Demo data reset! Created ${data.teams_created} teams, ${data.steps_created} steps. ${data.note}`);
+      toast.success(`Demo data reset! Created ${data.users_created} users, ${data.teams_created} teams, ${data.steps_created} steps. ${data.note}`);
       // Invalidate queries to refresh data
       queryClient.invalidateQueries({ queryKey: ['competitions'] });
       queryClient.invalidateQueries({ queryKey: ['teams'] });

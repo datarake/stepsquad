@@ -1648,7 +1648,42 @@ def dev_reset_and_seed(current_user: User = Depends(get_current_user)):
                 "updated_at": datetime.utcnow().isoformat()
             })
         
-        # Create teams and steps for users that exist
+        # Create demo users if they don't exist
+        demo_users = [
+            {"email": "alice@example.com", "role": "MEMBER", "uid": "demo_alice"},
+            {"email": "bob@example.com", "role": "MEMBER", "uid": "demo_bob"},
+            {"email": "charlie@example.com", "role": "MEMBER", "uid": "demo_charlie"},
+            {"email": "diana@example.com", "role": "MEMBER", "uid": "demo_diana"},
+            {"email": "eve@example.com", "role": "MEMBER", "uid": "demo_eve"},
+            {"email": "frank@example.com", "role": "MEMBER", "uid": "demo_frank"},
+        ]
+        
+        users_created = 0
+        for user_data in demo_users:
+            existing = get_user_by_email(user_data["email"])
+            if not existing:
+                # Create user for demo
+                now = datetime.utcnow().isoformat()
+                user_record = {
+                    "uid": user_data["uid"],
+                    "email": user_data["email"],
+                    "role": user_data["role"],
+                    "created_at": now,
+                    "updated_at": now
+                }
+                upsert_user(user_data["uid"], user_record)
+                users_created += 1
+                logging.info(f"Created demo user: {user_data['email']} (UID: {user_data['uid']})")
+        
+        # Refresh user list after creating users
+        all_users = get_all_users()
+        def get_user_by_email(email: str):
+            for user in all_users:
+                if user.get("email", "").lower() == email.lower():
+                    return user
+            return None
+        
+        # Create teams and steps for demo users
         teams_created = 0
         steps_created = 0
         
@@ -1724,15 +1759,16 @@ def dev_reset_and_seed(current_user: User = Depends(get_current_user)):
                 except:
                     pass
         
-        logging.info(f"Reset and seed completed: {teams_created} teams, {steps_created} steps, {virtual_devices_connected} virtual devices")
+        logging.info(f"Reset and seed completed: {users_created} users, {teams_created} teams, {steps_created} steps, {virtual_devices_connected} virtual devices")
         
         return {
             "ok": True,
             "message": "Demo data reset and seeded successfully",
+            "users_created": users_created,
             "teams_created": teams_created,
             "steps_created": steps_created,
             "virtual_devices_connected": virtual_devices_connected,
-            "note": "Users need to log in first to see teams and steps. Log in with: alice@example.com, bob@example.com, etc."
+            "note": f"Created {users_created} demo users, {teams_created} teams, and {steps_created} step entries. Demo users: alice@example.com, bob@example.com, charlie@example.com, etc."
         }
     
     except Exception as e:

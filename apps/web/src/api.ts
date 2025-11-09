@@ -396,7 +396,7 @@ class ApiClient {
   }
 
   // Hackathon Demo - Reset and Seed
-  async resetAndSeedDemoData(): Promise<{ ok: boolean; message: string; teams_created: number; steps_created: number; virtual_devices_connected: number; note: string }> {
+  async resetAndSeedDemoData(): Promise<{ ok: boolean; message: string; users_created: number; teams_created: number; steps_created: number; virtual_devices_connected: number; note: string }> {
     const headers = await this.getAuthHeaders();
     const response = await fetch(`${API_BASE_URL}/dev/reset-and-seed`, {
       method: 'POST',
