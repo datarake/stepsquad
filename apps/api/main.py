@@ -900,6 +900,15 @@ async def garmin_authorize(current_user: User = Depends(get_current_user)):
     Returns authorization URL for user to redirect to Garmin
     """
     try:
+        # Check if user already has a device connected
+        existing_devices = get_user_devices(current_user.uid)
+        if existing_devices:
+            existing_provider = existing_devices[0].get("provider")
+            raise HTTPException(
+                status_code=400,
+                detail=f"You already have a {existing_provider} device connected. Only one device can be connected at a time. Please unlink your {existing_provider} device first."
+            )
+        
         # Generate state token for CSRF protection
         state = generate_state_token(current_user.uid)
         
@@ -912,6 +921,8 @@ async def garmin_authorize(current_user: User = Depends(get_current_user)):
             "provider": "garmin"
         }
     
+    except HTTPException:
+        raise
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
@@ -953,6 +964,16 @@ async def garmin_callback(
         uid = state_data.get("uid")
         if not uid:
             raise HTTPException(status_code=400, detail="User not found in state token")
+        
+        # Check if user already has a different device connected
+        existing_devices = get_user_devices(uid)
+        if existing_devices:
+            existing_provider = existing_devices[0].get("provider")
+            if existing_provider != "garmin":
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"You already have a {existing_provider} device connected. Only one device can be connected at a time. Please unlink your {existing_provider} device first."
+                )
         
         # Exchange authorization for access token
         # Garmin uses OAuth 1.0a, so we need oauth_token and oauth_verifier
@@ -1009,6 +1030,15 @@ async def fitbit_authorize(current_user: User = Depends(get_current_user)):
     Returns authorization URL for user to redirect to Fitbit
     """
     try:
+        # Check if user already has a device connected
+        existing_devices = get_user_devices(current_user.uid)
+        if existing_devices:
+            existing_provider = existing_devices[0].get("provider")
+            raise HTTPException(
+                status_code=400,
+                detail=f"You already have a {existing_provider} device connected. Only one device can be connected at a time. Please unlink your {existing_provider} device first."
+            )
+        
         # Generate state token for CSRF protection
         state = fitbit_generate_state_token(current_user.uid)
         
@@ -1021,6 +1051,8 @@ async def fitbit_authorize(current_user: User = Depends(get_current_user)):
             "provider": "fitbit"
         }
     
+    except HTTPException:
+        raise
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
@@ -1060,6 +1092,16 @@ async def fitbit_callback(
         uid = state_data.get("uid")
         if not uid:
             raise HTTPException(status_code=400, detail="User not found in state token")
+        
+        # Check if user already has a different device connected
+        existing_devices = get_user_devices(uid)
+        if existing_devices:
+            existing_provider = existing_devices[0].get("provider")
+            if existing_provider != "fitbit":
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"You already have a {existing_provider} device connected. Only one device can be connected at a time. Please unlink your {existing_provider} device first."
+                )
         
         # Exchange authorization code for access token
         tokens = exchange_fitbit_code(code)

@@ -96,6 +96,8 @@ export function DeviceSettingsPage() {
 
   const devices = devicesData?.devices || [];
   const linkedProviders = devices.map(d => d.provider);
+  const hasGarmin = linkedProviders.includes('garmin');
+  const hasFitbit = linkedProviders.includes('fitbit');
 
   if (isLoading) {
     return (
@@ -195,7 +197,7 @@ export function DeviceSettingsPage() {
         <h2 className="text-lg font-semibold text-gray-900 mb-4">Connect a Device</h2>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {/* Garmin */}
-          <div className="bg-white border border-gray-200 rounded-lg p-6 shadow-sm">
+          <div className={`bg-white border rounded-lg p-6 shadow-sm ${hasFitbit && !hasGarmin ? 'border-amber-300 bg-amber-50' : 'border-gray-200'}`}>
             <div className="flex items-center gap-4 mb-4">
               <div className="flex items-center justify-center w-12 h-12 bg-orange-100 rounded-lg">
                 <Activity className="h-6 w-6 text-orange-600" />
@@ -205,10 +207,24 @@ export function DeviceSettingsPage() {
                 <p className="text-sm text-gray-600">Connect your Garmin device</p>
               </div>
             </div>
-            {linkedProviders.includes('garmin') ? (
+            {hasGarmin ? (
               <div className="text-sm text-green-600 font-medium flex items-center gap-2">
                 <Link2 className="h-4 w-4" />
                 Connected
+              </div>
+            ) : hasFitbit ? (
+              <div className="space-y-2">
+                <button
+                  disabled
+                  className="w-full px-4 py-2 bg-gray-300 text-gray-500 rounded-lg cursor-not-allowed flex items-center justify-center gap-2"
+                >
+                  <Link2 className="h-4 w-4" />
+                  Connect Garmin
+                </button>
+                <div className="text-xs text-amber-700 bg-amber-100 border border-amber-200 rounded p-2 flex items-start gap-2">
+                  <AlertCircle className="h-4 w-4 mt-0.5 flex-shrink-0" />
+                  <span>Only one device can be connected at a time. Please unlink your Fitbit device first to connect Garmin.</span>
+                </div>
               </div>
             ) : (
               <button
@@ -222,7 +238,7 @@ export function DeviceSettingsPage() {
           </div>
 
           {/* Fitbit */}
-          <div className="bg-white border border-gray-200 rounded-lg p-6 shadow-sm">
+          <div className={`bg-white border rounded-lg p-6 shadow-sm ${hasGarmin && !hasFitbit ? 'border-amber-300 bg-amber-50' : 'border-gray-200'}`}>
             <div className="flex items-center gap-4 mb-4">
               <div className="flex items-center justify-center w-12 h-12 bg-blue-100 rounded-lg">
                 <Activity className="h-6 w-6 text-blue-600" />
@@ -232,10 +248,24 @@ export function DeviceSettingsPage() {
                 <p className="text-sm text-gray-600">Connect your Fitbit device</p>
               </div>
             </div>
-            {linkedProviders.includes('fitbit') ? (
+            {hasFitbit ? (
               <div className="text-sm text-green-600 font-medium flex items-center gap-2">
                 <Link2 className="h-4 w-4" />
                 Connected
+              </div>
+            ) : hasGarmin ? (
+              <div className="space-y-2">
+                <button
+                  disabled
+                  className="w-full px-4 py-2 bg-gray-300 text-gray-500 rounded-lg cursor-not-allowed flex items-center justify-center gap-2"
+                >
+                  <Link2 className="h-4 w-4" />
+                  Connect Fitbit
+                </button>
+                <div className="text-xs text-amber-700 bg-amber-100 border border-amber-200 rounded p-2 flex items-start gap-2">
+                  <AlertCircle className="h-4 w-4 mt-0.5 flex-shrink-0" />
+                  <span>Only one device can be connected at a time. Please unlink your Garmin device first to connect Fitbit.</span>
+                </div>
               </div>
             ) : (
               <button
