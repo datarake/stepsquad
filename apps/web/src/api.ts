@@ -394,6 +394,16 @@ class ApiClient {
     });
     return this.handleResponse(response);
   }
+
+  // Hackathon Demo - Reset and Seed
+  async resetAndSeedDemoData(): Promise<{ ok: boolean; message: string; teams_created: number; steps_created: number; virtual_devices_connected: number; note: string }> {
+    const headers = await this.getAuthHeaders();
+    const response = await fetch(`${API_BASE_URL}/dev/reset-and-seed`, {
+      method: 'POST',
+      headers,
+    });
+    return this.handleResponse(response);
+  }
 }
 
 export const apiClient = new ApiClient();

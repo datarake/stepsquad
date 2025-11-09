@@ -160,13 +160,13 @@ def test_firebase_auth_admin_role_from_custom_claim(mock_firebase_enabled):
 
 def test_firebase_auth_admin_role_from_email(mock_firebase_enabled):
     """Test Firebase auth assigns ADMIN role from email"""
-    with patch.dict(os.environ, {"GCP_ENABLED": "true", "ADMIN_EMAIL": "admin@stepsquad.com"}):
+    with patch.dict(os.environ, {"GCP_ENABLED": "true", "ADMIN_EMAIL": "admin@stepsquad.club"}):
         with patch("firebase_auth.verify_id_token") as mock_verify:
             with patch("storage.get_user") as mock_get_user:
                 with patch("storage.upsert_user") as mock_upsert:
                     mock_decoded_token = {
                         "uid": "firebase-uid-admin",
-                        "email": "admin@stepsquad.com",  # Admin email
+                        "email": "admin@stepsquad.club",  # Admin email
                         # No custom claim
                     }
                     mock_verify.return_value = mock_decoded_token

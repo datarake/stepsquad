@@ -179,7 +179,7 @@ async def get_current_user(
         user_data = get_user(x_dev_user)
         if not user_data:
             # Create user if doesn't exist
-            role = "ADMIN" if x_dev_user.lower() == "admin@stepsquad.com" else "MEMBER"
+            role = "ADMIN" if x_dev_user.lower() == "admin@stepsquad.club" else "MEMBER"
             now = datetime.utcnow().isoformat()
             user_data = {
                 "uid": x_dev_user,
@@ -1450,7 +1450,7 @@ async def unlink_device(
 @app.post("/dev/seed")
 def dev_seed():
     # Create users with roles
-    admin_email = os.getenv("VITE_ADMIN_EMAIL", "admin@stepsquad.com")
+    admin_email = os.getenv("VITE_ADMIN_EMAIL", "admin@stepsquad.club")
     upsert_user("u1", {"email": "a@x", "role": "MEMBER"})
     upsert_user("u2", {"email": "b@x", "role": "MEMBER"})
     upsert_user("u3", {"email": "c@x", "role": "MEMBER"})
@@ -1498,3 +1498,243 @@ def dev_seed():
     write_daily_steps("u2", "2025-10-25", 7000)
     write_daily_steps("u3", "2025-10-25", 14000)
     return {"ok": True}
+
+
+@app.post("/dev/fix-admin-role")
+def dev_fix_admin_role(current_user: User = Depends(get_current_user)):
+    """
+    Fix admin user role - updates role to ADMIN for admin@stepsquad.club.
+    Only accessible to admin@stepsquad.club (even if they have MEMBER role).
+    """
+    # Only allow admin@stepsquad.club
+    if current_user.email.lower() != "admin@stepsquad.club":
+        raise HTTPException(status_code=403, detail="This endpoint is only available for admin@stepsquad.club")
+    
+    # Update user role to ADMIN
+    user_data = get_user(current_user.uid)
+    if not user_data:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    user_data["role"] = "ADMIN"
+    user_data["updated_at"] = datetime.utcnow().isoformat()
+    upsert_user(current_user.uid, user_data)
+    
+    logging.info(f"Fixed admin role for {current_user.email} (UID: {current_user.uid})")
+    
+    return {
+        "ok": True,
+        "message": "Admin role updated successfully. Please refresh the page.",
+        "user": {
+            "email": user_data.get("email"),
+            "role": user_data.get("role"),
+            "uid": user_data.get("uid")
+        }
+    }
+
+
+@app.post("/dev/reset-and-seed")
+def dev_reset_and_seed(current_user: User = Depends(get_current_user)):
+    """
+    Reset and seed demo data for hackathon demo.
+    Only accessible to admin@stepsquad.club
+    """
+    # Only allow admin@stepsquad.club
+    if current_user.email.lower() != "admin@stepsquad.club":
+        raise HTTPException(status_code=403, detail="This endpoint is only available for admin@stepsquad.club")
+    
+    # Check role - but also allow if email matches (in case role hasn't been updated yet)
+    if current_user.role != "ADMIN":
+        # Try to fix the role first
+        user_data = get_user(current_user.uid)
+        if user_data:
+            user_data["role"] = "ADMIN"
+            user_data["updated_at"] = datetime.utcnow().isoformat()
+            upsert_user(current_user.uid, user_data)
+            logging.info(f"Auto-fixed admin role for {current_user.email} (UID: {current_user.uid})")
+        else:
+            raise HTTPException(status_code=403, detail="Admin access required")
+    
+    from datetime import timedelta
+    from storage import get_all_users, get_teams, get_competition, GCP_ENABLED, DAILY_STEPS
+    from gcp_clients import fs
+    
+    try:
+        # Get all users to find by email
+        all_users = get_all_users()
+        def get_user_by_email(email: str):
+            for user in all_users:
+                if user.get("email", "").lower() == email.lower():
+                    return user
+            return None
+        
+        # Calculate dates
+        today = datetime.now().date()
+        yesterday = today - timedelta(days=1)
+        two_days_ago = today - timedelta(days=2)
+        three_days_ago = today - timedelta(days=3)
+        reg_open = three_days_ago.strftime("%Y-%m-%d")
+        start_date = two_days_ago.strftime("%Y-%m-%d")
+        end_date = (today + timedelta(days=7)).strftime("%Y-%m-%d")
+        
+        # Clear existing teams and steps (keep competitions and users)
+        logging.info("Clearing existing teams and steps...")
+        existing_teams = get_teams()
+        for team in existing_teams:
+            team_id = team.get("team_id")
+            if team_id:
+                # Delete team members
+                members = team.get("members", [])
+                for member_uid in members:
+                    try:
+                        leave_team(team_id, member_uid)
+                    except:
+                        pass
+        
+        # Clear all daily steps
+        if GCP_ENABLED and fs():
+            daily_steps_coll = fs().collection("daily_steps")
+            docs = daily_steps_coll.stream()
+            for doc in docs:
+                doc.reference.delete()
+        
+        # Clear local daily steps (if using local storage)
+        DAILY_STEPS.clear()
+        
+        # Get admin user
+        admin = get_user_by_email("admin@stepsquad.club")
+        admin_uid = admin["uid"] if admin else current_user.uid
+        
+        # Create/update competitions
+        comp1 = get_competition("hackathon2025")
+        if not comp1:
+            create_competition("hackathon2025", {
+                "comp_id": "hackathon2025",
+                "name": "Google Cloud Run Hackathon 2025",
+                "status": "ACTIVE",
+                "tz": COMP_TZ,
+                "registration_open_date": reg_open,
+                "start_date": start_date,
+                "end_date": end_date,
+                "max_teams": 10,
+                "max_members_per_team": 5,
+                "created_by": admin_uid,
+                "created_at": datetime.utcnow().isoformat(),
+                "updated_at": datetime.utcnow().isoformat()
+            })
+        else:
+            # Update existing competition
+            update_competition("hackathon2025", {
+                "name": "Google Cloud Run Hackathon 2025",
+                "status": "ACTIVE",
+                "registration_open_date": reg_open,
+                "start_date": start_date,
+                "end_date": end_date,
+            })
+        
+        comp2 = get_competition("spring2025")
+        if not comp2:
+            create_competition("spring2025", {
+                "comp_id": "spring2025",
+                "name": "Spring Fitness Challenge 2025",
+                "status": "REGISTRATION",
+                "tz": COMP_TZ,
+                "registration_open_date": today.strftime("%Y-%m-%d"),
+                "start_date": (today + timedelta(days=7)).strftime("%Y-%m-%d"),
+                "end_date": (today + timedelta(days=30)).strftime("%Y-%m-%d"),
+                "max_teams": 20,
+                "max_members_per_team": 8,
+                "created_by": admin_uid,
+                "created_at": datetime.utcnow().isoformat(),
+                "updated_at": datetime.utcnow().isoformat()
+            })
+        
+        # Create teams and steps for users that exist
+        teams_created = 0
+        steps_created = 0
+        
+        # Team Alpha
+        alice = get_user_by_email("alice@example.com")
+        bob = get_user_by_email("bob@example.com")
+        if alice and bob:
+            team_id = "team_hackathon2025_team_alpha"
+            create_team(team_id, "Team Alpha", alice["uid"], "hackathon2025")
+            join_team(team_id, bob["uid"])
+            teams_created += 1
+            
+            # Steps for Team Alpha
+            write_daily_steps(alice["uid"], three_days_ago.strftime("%Y-%m-%d"), 8500)
+            write_daily_steps(alice["uid"], two_days_ago.strftime("%Y-%m-%d"), 9200)
+            write_daily_steps(alice["uid"], yesterday.strftime("%Y-%m-%d"), 7800)
+            write_daily_steps(alice["uid"], today.strftime("%Y-%m-%d"), 10500)
+            write_daily_steps(bob["uid"], three_days_ago.strftime("%Y-%m-%d"), 12000)
+            write_daily_steps(bob["uid"], two_days_ago.strftime("%Y-%m-%d"), 11000)
+            write_daily_steps(bob["uid"], yesterday.strftime("%Y-%m-%d"), 13500)
+            write_daily_steps(bob["uid"], today.strftime("%Y-%m-%d"), 12800)
+            steps_created += 8
+        
+        # Team Beta
+        charlie = get_user_by_email("charlie@example.com")
+        diana = get_user_by_email("diana@example.com")
+        if charlie and diana:
+            team_id = "team_hackathon2025_team_beta"
+            create_team(team_id, "Team Beta", charlie["uid"], "hackathon2025")
+            join_team(team_id, diana["uid"])
+            teams_created += 1
+            
+            # Steps for Team Beta
+            write_daily_steps(charlie["uid"], three_days_ago.strftime("%Y-%m-%d"), 6500)
+            write_daily_steps(charlie["uid"], two_days_ago.strftime("%Y-%m-%d"), 7200)
+            write_daily_steps(charlie["uid"], yesterday.strftime("%Y-%m-%d"), 6800)
+            write_daily_steps(charlie["uid"], today.strftime("%Y-%m-%d"), 7500)
+            write_daily_steps(diana["uid"], three_days_ago.strftime("%Y-%m-%d"), 9800)
+            write_daily_steps(diana["uid"], two_days_ago.strftime("%Y-%m-%d"), 10200)
+            write_daily_steps(diana["uid"], yesterday.strftime("%Y-%m-%d"), 9500)
+            write_daily_steps(diana["uid"], today.strftime("%Y-%m-%d"), 10800)
+            steps_created += 8
+        
+        # Team Gamma
+        eve = get_user_by_email("eve@example.com")
+        frank = get_user_by_email("frank@example.com")
+        if eve and frank:
+            team_id = "team_hackathon2025_team_gamma"
+            create_team(team_id, "Team Gamma", eve["uid"], "hackathon2025")
+            join_team(team_id, frank["uid"])
+            teams_created += 1
+            
+            # Steps for Team Gamma
+            write_daily_steps(eve["uid"], three_days_ago.strftime("%Y-%m-%d"), 15000)
+            write_daily_steps(eve["uid"], two_days_ago.strftime("%Y-%m-%d"), 14500)
+            write_daily_steps(eve["uid"], yesterday.strftime("%Y-%m-%d"), 16000)
+            write_daily_steps(eve["uid"], today.strftime("%Y-%m-%d"), 15200)
+            write_daily_steps(frank["uid"], three_days_ago.strftime("%Y-%m-%d"), 11200)
+            write_daily_steps(frank["uid"], two_days_ago.strftime("%Y-%m-%d"), 11800)
+            write_daily_steps(frank["uid"], yesterday.strftime("%Y-%m-%d"), 10500)
+            write_daily_steps(frank["uid"], today.strftime("%Y-%m-%d"), 12000)
+            steps_created += 8
+        
+        # Connect virtual devices
+        virtual_devices_connected = 0
+        for email in ["alice@example.com", "bob@example.com", "charlie@example.com"]:
+            user = get_user_by_email(email)
+            if user:
+                try:
+                    from device_storage import store_device_tokens
+                    store_device_tokens(user["uid"], "virtual", None)
+                    virtual_devices_connected += 1
+                except:
+                    pass
+        
+        logging.info(f"Reset and seed completed: {teams_created} teams, {steps_created} steps, {virtual_devices_connected} virtual devices")
+        
+        return {
+            "ok": True,
+            "message": "Demo data reset and seeded successfully",
+            "teams_created": teams_created,
+            "steps_created": steps_created,
+            "virtual_devices_connected": virtual_devices_connected,
+            "note": "Users need to log in first to see teams and steps. Log in with: alice@example.com, bob@example.com, etc."
+        }
+    
+    except Exception as e:
+        logging.error(f"Error resetting and seeding data: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to reset and seed data: {str(e)}")

@@ -20,7 +20,7 @@ pnpm install
 cat > .env.local << EOF
 VITE_API_BASE_URL=http://localhost:8080
 VITE_USE_DEV_AUTH=true
-VITE_ADMIN_EMAIL=admin@stepsquad.com
+VITE_ADMIN_EMAIL=admin@stepsquad.club
 EOF
 ```
 
@@ -51,7 +51,7 @@ VITE_API_BASE_URL=http://localhost:8080
 
 # Authentication Configuration
 VITE_USE_DEV_AUTH=true
-VITE_ADMIN_EMAIL=admin@stepsquad.com
+VITE_ADMIN_EMAIL=admin@stepsquad.club
 
 # Firebase Configuration (when VITE_USE_DEV_AUTH=false)
 # VITE_FIREBASE_API_KEY=your-api-key
@@ -78,7 +78,7 @@ npm run dev
 3. Open http://localhost:5173 in your browser
 
 4. Login with:
-   - Email: `admin@stepsquad.com` (gets ADMIN role)
+   - Email: `admin@stepsquad.club` (gets ADMIN role)
    - Any other email (gets MEMBER role)
 
 ## Troubleshooting

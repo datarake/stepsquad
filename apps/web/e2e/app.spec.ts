@@ -8,7 +8,7 @@ test.describe('Authentication Flow', () => {
     await expect(page.getByRole('heading', { name: /sign in to stepsquad/i })).toBeVisible();
     
     // Enter email
-    await page.getByLabel(/email address/i).fill('admin@stepsquad.com');
+    await page.getByLabel(/email address/i).fill('admin@stepsquad.club');
     
     // Submit form
     await page.getByRole('button', { name: /sign in/i }).click();
@@ -17,7 +17,7 @@ test.describe('Authentication Flow', () => {
     await expect(page).toHaveURL('/');
     
     // Should see user info in topbar
-    await expect(page.getByText('admin@stepsquad.com')).toBeVisible();
+    await expect(page.getByText('admin@stepsquad.club')).toBeVisible();
     // Check for ADMIN role badge (more specific selector)
     await expect(page.locator('span:has-text("ADMIN")').filter({ hasText: /^ADMIN$/ })).toBeVisible();
   });
@@ -25,7 +25,7 @@ test.describe('Authentication Flow', () => {
   test('user can logout', async ({ page }) => {
     // Login first
     await page.goto('/login');
-    await page.getByLabel(/email address/i).fill('admin@stepsquad.com');
+    await page.getByLabel(/email address/i).fill('admin@stepsquad.club');
     await page.getByRole('button', { name: /sign in/i }).click();
     
     // Wait for redirect
@@ -43,7 +43,7 @@ test.describe('Competition Management', () => {
   test.beforeEach(async ({ page }) => {
     // Login as admin
     await page.goto('/login');
-    await page.getByLabel(/email address/i).fill('admin@stepsquad.com');
+    await page.getByLabel(/email address/i).fill('admin@stepsquad.club');
     await page.getByRole('button', { name: /sign in/i }).click();
     await expect(page).toHaveURL('/');
   });

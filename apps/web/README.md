@@ -44,7 +44,7 @@ Edit `.env.local` with your configuration:
 ```env
 VITE_API_BASE_URL=http://localhost:8080
 VITE_USE_DEV_AUTH=true
-VITE_ADMIN_EMAIL=admin@stepsquad.com
+VITE_ADMIN_EMAIL=admin@stepsquad.club
 ```
 
 3. Start the development server:

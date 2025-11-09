@@ -22,12 +22,12 @@ def test_health():
 def test_auth_admin():
     """Test admin authentication"""
     print("\nTesting admin authentication...")
-    headers = {"X-Dev-User": "admin@stepsquad.com"}
+    headers = {"X-Dev-User": "admin@stepsquad.club"}
     response = requests.get(f"{BASE_URL}/me", headers=headers)
     assert response.status_code == 200
     data = response.json()
     assert data["role"] == "ADMIN"
-    assert data["email"] == "admin@stepsquad.com"
+    assert data["email"] == "admin@stepsquad.club"
     print("✅ Admin auth passed")
     return headers
 

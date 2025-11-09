@@ -35,10 +35,10 @@ describe('LoginForm', () => {
 
   it('renders admin email quick login in dev mode', () => {
     vi.stubEnv('VITE_USE_DEV_AUTH', 'true')
-    vi.stubEnv('VITE_ADMIN_EMAIL', 'admin@stepsquad.com')
+    vi.stubEnv('VITE_ADMIN_EMAIL', 'admin@stepsquad.club')
     
     render(<LoginForm />)
     
-    expect(screen.getByText(/admin@stepsquad.com/i)).toBeInTheDocument()
+    expect(screen.getByText(/admin@stepsquad.club/i)).toBeInTheDocument()
   })
 })

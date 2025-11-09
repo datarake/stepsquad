@@ -90,8 +90,8 @@ def main():
     import argparse
     
     parser = argparse.ArgumentParser(description='Set Firebase custom claims for admin user')
-    parser.add_argument('email', nargs='?', default='admin@stepsquad.com',
-                       help='Email address of the user (default: admin@stepsquad.com)')
+    parser.add_argument('email', nargs='?', default='admin@stepsquad.club',
+                       help='Email address of the user (default: admin@stepsquad.club)')
     
     args = parser.parse_args()
     

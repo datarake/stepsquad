@@ -36,7 +36,7 @@ A FastAPI-based backend for managing fitness competitions with role-based access
 
 ### Development Mode (`GCP_ENABLED=false`)
 - Use `X-Dev-User: <email>` header
-- Email `admin@stepsquad.com` gets ADMIN role
+- Email `admin@stepsquad.club` gets ADMIN role
 - All other emails get MEMBER role
 - Users are created automatically on first access
 

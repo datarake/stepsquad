@@ -236,7 +236,7 @@ def get_user_role_from_token(decoded_token: Dict) -> str:
     
     Role assignment logic:
     - If custom claim 'role' exists, use it
-    - Else if email is admin@stepsquad.com, assign ADMIN
+    - Else if email is admin@stepsquad.club, assign ADMIN
     - Else assign MEMBER
     
     Args:
@@ -251,7 +251,7 @@ def get_user_role_from_token(decoded_token: Dict) -> str:
     
     # Fallback to email-based role assignment
     email = decoded_token.get('email', '').lower()
-    admin_email = os.getenv("ADMIN_EMAIL", "admin@stepsquad.com").lower()
+    admin_email = os.getenv("ADMIN_EMAIL", "admin@stepsquad.club").lower()
     
     if email == admin_email:
         return "ADMIN"

@@ -37,7 +37,7 @@ export function LoginForm() {
   const { login } = useAuth();
 
   const USE_DEV_AUTH = import.meta.env.VITE_USE_DEV_AUTH === 'true';
-  const ADMIN_EMAIL = import.meta.env.VITE_ADMIN_EMAIL || 'admin@stepsquad.com';
+  const ADMIN_EMAIL = import.meta.env.VITE_ADMIN_EMAIL || 'admin@stepsquad.club';
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

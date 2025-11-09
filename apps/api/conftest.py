@@ -15,7 +15,7 @@ def client():
 @pytest.fixture
 def admin_headers():
     """Headers for admin user"""
-    return {"X-Dev-User": "admin@stepsquad.com"}
+    return {"X-Dev-User": "admin@stepsquad.club"}
 
 @pytest.fixture
 def member_headers():

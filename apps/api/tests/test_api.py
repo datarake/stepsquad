@@ -18,7 +18,7 @@ def test_me_endpoint_creates_admin(client, admin_headers):
     response = client.get("/me", headers=admin_headers)
     assert response.status_code == 200
     data = response.json()
-    assert data["email"] == "admin@stepsquad.com"
+    assert data["email"] == "admin@stepsquad.club"
     assert data["role"] == "ADMIN"
     assert "uid" in data
 

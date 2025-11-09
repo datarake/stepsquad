@@ -44,7 +44,7 @@ def check_backend_setup():
             print("   This is OK for Cloud Run, but you need explicit credentials for local testing")
     
     # Check admin email
-    admin_email = os.getenv("ADMIN_EMAIL", "admin@stepsquad.com")
+    admin_email = os.getenv("ADMIN_EMAIL", "admin@stepsquad.club")
     print(f"✅ ADMIN_EMAIL={admin_email}")
     
     # Check timezone
