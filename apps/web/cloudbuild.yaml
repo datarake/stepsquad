@@ -18,6 +18,8 @@ steps:
       - 'VITE_FIREBASE_MESSAGING_SENDER_ID=${_VITE_FIREBASE_MESSAGING_SENDER_ID}'
       - '--build-arg'
       - 'VITE_FIREBASE_APP_ID=${_VITE_FIREBASE_APP_ID}'
+      - '--build-arg'
+      - 'VITE_GA_MEASUREMENT_ID=${_VITE_GA_MEASUREMENT_ID}'
       - '--tag'
       - '${_IMAGE_URL}'
       - '.'
@@ -30,6 +32,7 @@ substitutions:
   _VITE_FIREBASE_STORAGE_BUCKET: ''
   _VITE_FIREBASE_MESSAGING_SENDER_ID: ''
   _VITE_FIREBASE_APP_ID: ''
+  _VITE_GA_MEASUREMENT_ID: ''
   _IMAGE_URL: ''
 images:
   - '${_IMAGE_URL}'

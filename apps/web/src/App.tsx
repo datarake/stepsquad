@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Toaster } from 'react-hot-toast';
@@ -14,6 +14,8 @@ import { DeviceSettingsPage } from './DeviceSettingsPage';
 import { OAuthCallbackPage } from './OAuthCallbackPage';
 import { KeyboardShortcuts } from './KeyboardShortcuts';
 import { ErrorBoundary } from './ErrorBoundary';
+import { initGA } from './analytics';
+import { PageTracking } from './usePageTracking';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -40,6 +42,7 @@ function AppRoutes() {
 
   return (
     <Router>
+      <PageTracking />
       <KeyboardShortcuts />
       <Routes>
         <Route
@@ -113,6 +116,11 @@ function AppRoutes() {
 }
 
 export default function App() {
+  // Initialize Google Analytics on app load
+  useEffect(() => {
+    initGA();
+  }, []);
+
   return (
     <ErrorBoundary>
       <QueryClientProvider client={queryClient}>
