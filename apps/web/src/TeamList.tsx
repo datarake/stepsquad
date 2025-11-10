@@ -1,8 +1,6 @@
-import React, { useState, useMemo } from 'react';
-import { useQuery } from '@tanstack/react-query';
-import { Team, User } from './types';
+import React, { useState } from 'react';
+import { Team, TeamMemberProfile } from './types';
 import { Users, Edit2, ChevronDown, ChevronUp } from 'lucide-react';
-import { apiClient } from './api';
 
 interface TeamListProps {
   teams: Team[];
@@ -19,43 +17,6 @@ interface TeamListProps {
 export function TeamList({ teams, competition, currentUserUid, onJoinTeam, onLeaveTeam, onRenameTeam }: TeamListProps) {
   const canJoinOrLeave = competition.status === 'REGISTRATION' || competition.status === 'ACTIVE';
   const [expandedTeams, setExpandedTeams] = useState<Set<string>>(new Set());
-
-  // Collect all unique member UIDs from all teams
-  const allMemberUids = useMemo(() => {
-    const uids = new Set<string>();
-    teams.forEach(team => {
-      team.members.forEach(uid => uids.add(uid));
-      // Also include owner if not in members
-      if (!team.members.includes(team.owner_uid)) {
-        uids.add(team.owner_uid);
-      }
-    });
-    return Array.from(uids);
-  }, [teams]);
-
-  // Fetch user data for all team members
-  const { data: usersData } = useQuery({
-    queryKey: ['users', allMemberUids],
-    queryFn: async () => {
-      // Fetch all users in parallel
-      const userPromises = allMemberUids.map(uid => 
-        apiClient.getUser(uid).catch(() => null)
-      );
-      const users = await Promise.all(userPromises);
-      // Create a map of uid -> user
-      const userMap = new Map<string, User>();
-      users.forEach(user => {
-        if (user) {
-          userMap.set(user.uid, user);
-        }
-      });
-      return userMap;
-    },
-    enabled: allMemberUids.length > 0,
-    staleTime: 5 * 60 * 1000, // Cache for 5 minutes
-  });
-
-  const userMap = usersData || new Map<string, User>();
 
   const toggleTeamExpansion = (teamId: string) => {
     setExpandedTeams(prev => {
@@ -77,29 +38,40 @@ export function TeamList({ teams, competition, currentUserUid, onJoinTeam, onLea
     return team.owner_uid === currentUserUid;
   };
 
-  const getTeamMembersWithEmails = (team: Team) => {
-    const members: Array<{ uid: string; email: string; isOwner: boolean }> = [];
-    
-    // Add owner first
-    const owner = userMap.get(team.owner_uid);
-    if (owner) {
-      members.push({ uid: team.owner_uid, email: owner.email, isOwner: true });
+  const getTeamMembersWithEmails = (team: Team): TeamMemberProfile[] => {
+    if (team.member_profiles && team.member_profiles.length > 0) {
+      return team.member_profiles;
     }
-    
-    // Add other members
-    team.members.forEach(uid => {
-      if (uid !== team.owner_uid) {
-        const user = userMap.get(uid);
-        if (user) {
-          members.push({ uid, email: user.email, isOwner: false });
-        } else {
-          // Fallback if user not found
-          members.push({ uid, email: uid.substring(0, 8) + '...', isOwner: false });
-        }
+
+    const profiles: TeamMemberProfile[] = [];
+    const seen = new Set<string>();
+
+    const addProfile = (profile: TeamMemberProfile) => {
+      if (!seen.has(profile.uid)) {
+        seen.add(profile.uid);
+        profiles.push(profile);
       }
+    };
+
+    if (team.owner_uid) {
+      addProfile({
+        uid: team.owner_uid,
+        email: null,
+        display_name: team.owner_uid,
+        is_owner: true,
+      });
+    }
+
+    team.members.forEach(uid => {
+      addProfile({
+        uid,
+        email: null,
+        display_name: uid,
+        is_owner: uid === team.owner_uid,
+      });
     });
-    
-    return members;
+
+    return profiles;
   };
 
   if (teams.length === 0) {
@@ -120,6 +92,8 @@ export function TeamList({ teams, competition, currentUserUid, onJoinTeam, onLea
         const isMember = isUserMember(team);
         const isOwner = isUserOwner(team);
         const isFull = team.members.length >= competition.max_members_per_team;
+
+        const memberProfiles = getTeamMembersWithEmails(team);
 
         return (
           <div
@@ -172,12 +146,14 @@ export function TeamList({ teams, competition, currentUserUid, onJoinTeam, onLea
                       <span className="text-orange-600 font-medium">Full</span>
                     )}
                   </div>
-                  {expandedTeams.has(team.team_id) && team.members.length > 0 && (
+                  {expandedTeams.has(team.team_id) && memberProfiles.length > 0 && (
                     <div className="ml-6 mt-1 space-y-1">
-                      {getTeamMembersWithEmails(team).map((member) => (
-                        <div key={member.uid} className="flex items-center gap-2 text-xs text-gray-600">
-                          <span className="font-medium text-gray-700">{member.email}</span>
-                          {member.isOwner && (
+                      {memberProfiles.map((member) => (
+                        <div key={member.uid} className="flex flex-wrap items-center gap-2 text-xs text-gray-600">
+                          <span className="font-medium text-gray-700 break-all">
+                            {member.email || member.display_name}
+                          </span>
+                          {member.is_owner && (
                             <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800">
                               Owner
                             </span>
