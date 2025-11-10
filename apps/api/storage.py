@@ -506,6 +506,8 @@ def team_leaderboard(
             continue
         
         total_steps = 0
+        member_steps = {}  # Track individual member steps
+        
         if GCP_ENABLED and _fs_coll("daily_steps"):
             query = _fs_coll("daily_steps")
             
@@ -529,21 +531,29 @@ def team_leaderboard(
                 steps = int(doc_data.get("steps", 0))
                 
                 if uid in members:
+                    should_include = False
                     if date and step_date == date:
-                        total_steps += steps
+                        should_include = True
                     elif not date:
                         if start_date and step_date < start_date:
                             continue
                         if end_date and step_date > end_date:
                             continue
-                        total_steps += steps
+                        should_include = True
                     elif not date and start_date and end_date:
                         if start_date <= step_date <= end_date:
-                            total_steps += steps
+                            should_include = True
+                    
+                    if should_include:
+                        total_steps += steps
+                        member_steps[uid] = member_steps.get(uid, 0) + steps
         else:
             # Local storage
             if date:
-                total_steps = sum(DAILY_STEPS.get((uid, date), 0) for uid in members)
+                for uid in members:
+                    steps = DAILY_STEPS.get((uid, date), 0)
+                    total_steps += steps
+                    member_steps[uid] = steps
             else:
                 for (uid, step_date), steps in DAILY_STEPS.items():
                     if uid in members:
@@ -552,6 +562,7 @@ def team_leaderboard(
                         if end_date and step_date > end_date:
                             continue
                         total_steps += steps
+                        member_steps[uid] = member_steps.get(uid, 0) + steps
         
         result.append({
             "team_id": team_id,
@@ -559,6 +570,7 @@ def team_leaderboard(
             "comp_id": team.get("comp_id"),
             "steps": total_steps,
             "member_count": len(members),
+            "member_steps": member_steps,  # Include individual member step counts
             "rank": 0,  # Will be set after sorting
         })
     

@@ -557,11 +557,88 @@ def leaderboard_team(
         end_date=end_date,
     )
     
+    # Enrich with member profiles (email, display_name, steps)
+    enriched_rows = []
+    for row in rows:
+        team_id = row.get("team_id")
+        member_steps = row.get("member_steps", {})
+        
+        # Get team to access members
+        team = get_team(team_id)
+        if not team:
+            enriched_rows.append(row)
+            continue
+        
+        members = team.get("members", [])
+        owner_uid = team.get("owner_uid")
+        
+        # Collect unique user IDs
+        unique_user_ids = set(members)
+        if owner_uid:
+            unique_user_ids.add(owner_uid)
+        
+        # Fetch user data
+        user_lookup = {}
+        for uid in unique_user_ids:
+            user_data = get_user(uid)
+            if user_data:
+                user_lookup[uid] = user_data
+        
+        # Build member profiles with step counts
+        member_profiles = []
+        
+        # Add owner first
+        if owner_uid:
+            owner_data = user_lookup.get(owner_uid)
+            owner_email = owner_data.get("email") if owner_data else None
+            owner_display = None
+            if owner_data:
+                owner_display = owner_data.get("display_name") or owner_email
+            if not owner_display:
+                owner_display = owner_uid
+            
+            member_profiles.append({
+                "uid": owner_uid,
+                "email": owner_email,
+                "display_name": owner_display,
+                "is_owner": True,
+                "steps": member_steps.get(owner_uid, 0),
+            })
+        
+        # Add other members
+        for uid in members:
+            if uid == owner_uid:
+                continue
+            
+            user_data = user_lookup.get(uid)
+            email = user_data.get("email") if user_data else None
+            display_name = None
+            if user_data:
+                display_name = user_data.get("display_name") or email
+            if not display_name:
+                display_name = f"{uid[:8]}..." if len(uid) > 8 else uid
+            
+            member_profiles.append({
+                "uid": uid,
+                "email": email,
+                "display_name": display_name,
+                "is_owner": False,
+                "steps": member_steps.get(uid, 0),
+            })
+        
+        # Sort members by steps descending
+        member_profiles.sort(key=lambda m: m["steps"], reverse=True)
+        
+        # Add member_profiles to row
+        enriched_row = dict(row)
+        enriched_row["member_profiles"] = member_profiles
+        enriched_rows.append(enriched_row)
+    
     # Apply pagination
-    total = len(rows)
+    total = len(enriched_rows)
     start = (page - 1) * page_size
     end = start + page_size
-    paginated_rows = rows[start:end]
+    paginated_rows = enriched_rows[start:end]
     
     total_pages = (total + page_size - 1) // page_size if page_size > 0 else 0
     
@@ -582,7 +659,74 @@ def get_competition_teams(comp_id: str, current_user: User = Depends(get_current
         raise HTTPException(status_code=404, detail="Competition not found")
     
     teams = get_teams(comp_id=comp_id)
-    return {"rows": teams}
+
+    if not teams:
+        return {"rows": []}
+
+    # Collect unique user IDs from owners and members
+    unique_user_ids = set()
+    for team in teams:
+        owner_uid = team.get("owner_uid")
+        if owner_uid:
+            unique_user_ids.add(owner_uid)
+
+        for uid in team.get("members", []):
+            if uid:
+                unique_user_ids.add(uid)
+
+    # Fetch user data for all relevant users
+    user_lookup = {}
+    for uid in unique_user_ids:
+        user_data = get_user(uid)
+        if user_data:
+            user_lookup[uid] = user_data
+
+    enriched_teams = []
+    for team in teams:
+        member_profiles = []
+        owner_uid = team.get("owner_uid")
+
+        if owner_uid:
+            owner_data = user_lookup.get(owner_uid)
+            owner_email = owner_data.get("email") if owner_data else None
+            owner_display = None
+            if owner_data:
+                owner_display = owner_data.get("display_name") or owner_email
+
+            if not owner_display:
+                owner_display = owner_uid
+            member_profiles.append({
+                "uid": owner_uid,
+                "email": owner_email,
+                "display_name": owner_display,
+                "is_owner": True,
+            })
+
+        for uid in team.get("members", []):
+            if uid == owner_uid:
+                continue
+
+            user_data = user_lookup.get(uid)
+            email = user_data.get("email") if user_data else None
+            display_name = None
+            if user_data:
+                display_name = user_data.get("display_name") or email
+            if not display_name:
+                # Fallback to a shortened UID for readability
+                display_name = f"{uid[:8]}..." if len(uid) > 8 else uid
+
+            member_profiles.append({
+                "uid": uid,
+                "email": email,
+                "display_name": display_name,
+                "is_owner": False,
+            })
+
+        team_with_profiles = dict(team)
+        team_with_profiles["member_profiles"] = member_profiles
+        enriched_teams.append(team_with_profiles)
+
+    return {"rows": enriched_teams}
 
 @app.get("/teams/{team_id}")
 def get_team_detail(team_id: str, current_user: User = Depends(get_current_user)):
@@ -590,8 +734,48 @@ def get_team_detail(team_id: str, current_user: User = Depends(get_current_user)
     team = get_team(team_id)
     if not team:
         raise HTTPException(status_code=404, detail="Team not found")
+
+    owner_uid = team.get("owner_uid")
+    member_profiles = []
+
+    if owner_uid:
+        owner_data = get_user(owner_uid)
+        owner_email = owner_data.get("email") if owner_data else None
+        owner_display = None
+        if owner_data:
+            owner_display = owner_data.get("display_name") or owner_email
+        if not owner_display:
+            owner_display = owner_uid
+        member_profiles.append({
+            "uid": owner_uid,
+            "email": owner_email,
+            "display_name": owner_display,
+            "is_owner": True,
+        })
+
+    for uid in team.get("members", []):
+        if uid == owner_uid:
+            continue
+
+        user_data = get_user(uid)
+        email = user_data.get("email") if user_data else None
+        display_name = None
+        if user_data:
+            display_name = user_data.get("display_name") or email
+        if not display_name:
+            display_name = f"{uid[:8]}..." if len(uid) > 8 else uid
+
+        member_profiles.append({
+            "uid": uid,
+            "email": email,
+            "display_name": display_name,
+            "is_owner": False,
+        })
+
+    team_with_profiles = dict(team)
+    team_with_profiles["member_profiles"] = member_profiles
     
-    return team
+    return team_with_profiles
 
 @app.post("/teams")
 def api_create_team(body: TeamCreate, current_user: User = Depends(get_current_user)):

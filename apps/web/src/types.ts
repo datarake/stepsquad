@@ -50,12 +50,21 @@ export interface CompetitionUpdateRequest {
   status?: Status;
 }
 
+export interface TeamMemberProfile {
+  uid: string;
+  email: string | null;
+  display_name: string;
+  is_owner: boolean;
+  steps?: number;  // Individual step count for leaderboard
+}
+
 export interface Team {
   team_id: string;
   name: string;
   comp_id: string;
   owner_uid: string;
   members: string[];
+  member_profiles?: TeamMemberProfile[];
 }
 
 export interface TeamCreateRequest {
@@ -107,6 +116,7 @@ export interface LeaderboardEntry {
   rank: number;
   member_count?: number;
   comp_id?: string;
+  member_profiles?: TeamMemberProfile[];  // Member details with individual step counts
 }
 
 export interface LeaderboardResponse {
