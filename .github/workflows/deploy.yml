@@ -323,12 +323,23 @@ jobs:
         env:
           PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
         run: |
+          # Build environment variables string
+          ENV_VARS="GCP_ENABLED=true,GOOGLE_CLOUD_PROJECT=$PROJECT_ID"
+          
+          # Add Gemini API key if available
+          if [ -n "${{ secrets.GEMINI_API_KEY }}" ]; then
+            ENV_VARS="$ENV_VARS,GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }}"
+            echo "✅ Gemini API key will be set"
+          else
+            echo "⚠️  Warning: GEMINI_API_KEY not set - AI recommendations will be limited"
+          fi
+          
           gcloud run deploy stepsquad-agents \
             --image ${{ env.REGION }}-docker.pkg.dev/$PROJECT_ID/${{ env.AR_REPO }}/agents:${{ github.sha }} \
             --platform managed \
             --region ${{ env.REGION }} \
             --no-allow-unauthenticated \
-            --set-env-vars="GCP_ENABLED=true,GOOGLE_CLOUD_PROJECT=$PROJECT_ID" \
+            --set-env-vars="$ENV_VARS" \
             --port 8080 \
             --memory 512Mi \
             --cpu 1
