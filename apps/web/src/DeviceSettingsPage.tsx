@@ -184,7 +184,7 @@ export function DeviceSettingsPage() {
                 key={device.provider}
                 className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm"
               >
-                <div className="flex items-center justify-between">
+                <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
                   <div className="flex items-center gap-4">
                     <div className={`flex items-center justify-center w-12 h-12 rounded-lg ${
                       device.provider === 'virtual' ? 'bg-purple-100' :
@@ -212,14 +212,14 @@ export function DeviceSettingsPage() {
                       </div>
                     </div>
                   </div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex flex-col md:flex-row items-stretch md:items-center gap-2">
                     <button
                       onClick={() => handleSync(device.provider)}
                       disabled={
                         (device.provider !== 'virtual' && (syncing === device.provider || syncMutation.isPending)) ||
                         (device.provider === 'virtual' && syncVirtualMutation.isPending)
                       }
-                      className={`px-4 py-2 text-white rounded-lg disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 ${
+                      className={`px-4 py-2 text-white rounded-lg disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 ${
                         device.provider === 'virtual' 
                           ? 'bg-purple-600 hover:bg-purple-700' 
                           : 'bg-blue-600 hover:bg-blue-700'
@@ -250,7 +250,7 @@ export function DeviceSettingsPage() {
                     <button
                       onClick={() => handleUnlink(device.provider)}
                       disabled={unlinkMutation.isPending}
-                      className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                      className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                     >
                       <Trash2 className="h-4 w-4" />
                       Unlink
