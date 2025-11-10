@@ -46,6 +46,8 @@ from fitbit_client import (
 app = FastAPI(title="StepSquad API", version="0.5.0")
 init_clients()
 
+logger = logging.getLogger(__name__)
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -1297,6 +1299,35 @@ async def sync_device(
         if not access_token:
             raise HTTPException(status_code=400, detail=f"{provider.capitalize()} access token not found")
         
+        # Check if token is expired and refresh if needed
+        expires_at = tokens.get("expires_at")
+        if expires_at and datetime.utcnow().timestamp() >= expires_at:
+            logger.info(f"Refreshing {provider} token for user {current_user.uid}")
+            try:
+                if provider == "fitbit" and tokens.get("refresh_token"):
+                    new_tokens = refresh_fitbit_token(tokens.get("refresh_token"))
+                    # Update stored tokens
+                    store_device_tokens(current_user.uid, provider, new_tokens)
+                    access_token = new_tokens.get("access_token")
+                    tokens = new_tokens
+                elif provider == "garmin":
+                    # Garmin OAuth 1.0a doesn't have refresh tokens
+                    raise HTTPException(
+                        status_code=401,
+                        detail="Garmin token expired, re-authentication required"
+                    )
+                else:
+                    raise HTTPException(
+                        status_code=401,
+                        detail=f"{provider.capitalize()} access token expired and no refresh token available"
+                    )
+            except Exception as e:
+                logger.error(f"Failed to refresh {provider} token: {e}")
+                raise HTTPException(
+                    status_code=401,
+                    detail=f"Token refresh failed: {str(e)}. Please reconnect your device."
+                )
+        
         # Determine date to sync
         if date:
             try:
@@ -1307,12 +1338,33 @@ async def sync_device(
             sync_date = datetime.now().date()
         
         # Fetch steps from device API
-        if provider == "garmin":
-            steps = get_garmin_daily_steps(access_token, sync_date)
-        elif provider == "fitbit":
-            steps = get_fitbit_daily_steps(access_token, sync_date)
-        else:
-            raise HTTPException(status_code=400, detail=f"Unknown provider: {provider}")
+        try:
+            if provider == "garmin":
+                steps = get_garmin_daily_steps(access_token, sync_date)
+            elif provider == "fitbit":
+                steps = get_fitbit_daily_steps(access_token, sync_date)
+            else:
+                raise HTTPException(status_code=400, detail=f"Unknown provider: {provider}")
+        except ValueError as e:
+            # Handle token expiration error from Fitbit API
+            if provider == "fitbit" and "expired" in str(e).lower() and tokens.get("refresh_token"):
+                logger.info(f"Token expired during API call, refreshing for user {current_user.uid}")
+                try:
+                    new_tokens = refresh_fitbit_token(tokens.get("refresh_token"))
+                    # Update stored tokens
+                    store_device_tokens(current_user.uid, provider, new_tokens)
+                    access_token = new_tokens.get("access_token")
+                    # Retry with new token
+                    steps = get_fitbit_daily_steps(access_token, sync_date)
+                except Exception as refresh_error:
+                    logger.error(f"Failed to refresh token after API error: {refresh_error}")
+                    raise HTTPException(
+                        status_code=401,
+                        detail=f"Token expired and refresh failed: {str(refresh_error)}. Please reconnect your device."
+                    )
+            else:
+                # Re-raise other ValueError exceptions
+                raise HTTPException(status_code=400, detail=str(e))
         
         # Find user's active competitions and sync steps to each
         # Get all competitions and check if user is in a team
