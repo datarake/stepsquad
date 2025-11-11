@@ -460,14 +460,34 @@ def individual_leaderboard(
             
             agg[uid] = agg.get(uid, 0) + steps
     
+    # Build user_id -> team mapping if we have comp_id
+    user_to_team = {}
+    if comp_id:
+        teams = get_teams(comp_id=comp_id)
+        for team in teams:
+            team_id = team.get("team_id")
+            team_name = team.get("name", team_id)
+            members = team.get("members", [])
+            owner_uid = team.get("owner_uid")
+            
+            # Map all members to their team
+            for member_uid in members:
+                user_to_team[member_uid] = {"team_id": team_id, "team_name": team_name}
+            # Also include owner
+            if owner_uid:
+                user_to_team[owner_uid] = {"team_id": team_id, "team_name": team_name}
+    
     # Convert to rows with user info
     rows = []
     for uid, total_steps in agg.items():
         user_info = get_user(uid) or {}
+        team_info = user_to_team.get(uid, {})
         rows.append({
             "user_id": uid,
             "email": user_info.get("email", uid),
             "steps": total_steps,
+            "team_id": team_info.get("team_id"),
+            "team_name": team_info.get("team_name"),
             "rank": 0,  # Will be set after sorting
         })
     

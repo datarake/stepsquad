@@ -20,11 +20,19 @@ declare global {
 }
 
 const GA_MEASUREMENT_ID = import.meta.env.VITE_GA_MEASUREMENT_ID;
+const IS_DEVELOPMENT = import.meta.env.DEV || import.meta.env.MODE === 'development';
 
 /**
  * Initialize Google Analytics
+ * Disabled in development mode
  */
 export function initGA() {
+  // Skip GA in development
+  if (IS_DEVELOPMENT) {
+    console.log('Google Analytics: Disabled in development mode');
+    return;
+  }
+
   if (!GA_MEASUREMENT_ID) {
     console.warn('Google Analytics: VITE_GA_MEASUREMENT_ID not set');
     return;
@@ -51,7 +59,7 @@ export function initGA() {
  * Track page view
  */
 export function trackPageView(path: string, title?: string) {
-  if (!GA_MEASUREMENT_ID || !window.gtag) return;
+  if (IS_DEVELOPMENT || !GA_MEASUREMENT_ID || !window.gtag) return;
 
   window.gtag('config', GA_MEASUREMENT_ID, {
     page_path: path,
@@ -71,7 +79,7 @@ export function trackEvent(
     [key: string]: any;
   }
 ) {
-  if (!GA_MEASUREMENT_ID || !window.gtag) return;
+  if (IS_DEVELOPMENT || !GA_MEASUREMENT_ID || !window.gtag) return;
 
   window.gtag('event', eventName, eventParams);
 }

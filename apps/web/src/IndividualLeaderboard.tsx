@@ -76,6 +76,11 @@ export function IndividualLeaderboard({ entries, isLoading, currentUserId }: Ind
                     </span>
                   )}
                 </div>
+                {entry.team_name && (
+                  <p className="text-xs text-gray-500 mt-1">
+                    {entry.team_name}
+                  </p>
+                )}
               </div>
             </div>
 

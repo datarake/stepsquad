@@ -110,6 +110,7 @@ export interface StepIngestResponse {
 export interface LeaderboardEntry {
   user_id?: string;
   team_id?: string;
+  team_name?: string;  // Team name for individual leaderboard
   email?: string;
   name?: string;
   steps: number;
