@@ -9,12 +9,13 @@ interface TeamListProps {
     status: string;
   };
   currentUserUid: string;
+  isUserInAnyTeam: boolean;  // Whether user is already in a team for this competition
   onJoinTeam: (teamId: string) => void;
   onLeaveTeam: (teamId: string) => void;
   onRenameTeam?: (teamId: string, currentName: string) => void;
 }
 
-export function TeamList({ teams, competition, currentUserUid, onJoinTeam, onLeaveTeam, onRenameTeam }: TeamListProps) {
+export function TeamList({ teams, competition, currentUserUid, isUserInAnyTeam, onJoinTeam, onLeaveTeam, onRenameTeam }: TeamListProps) {
   const canJoinOrLeave = competition.status === 'REGISTRATION' || competition.status === 'ACTIVE';
   const [expandedTeams, setExpandedTeams] = useState<Set<string>>(new Set());
 
@@ -165,7 +166,7 @@ export function TeamList({ teams, competition, currentUserUid, onJoinTeam, onLea
                 </div>
               </div>
               <div className="flex items-center gap-2">
-                {canJoinOrLeave && !isMember && !isFull && (
+                {canJoinOrLeave && !isMember && !isFull && !isUserInAnyTeam && (
                   <button
                     onClick={() => onJoinTeam(team.team_id)}
                     className="inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"

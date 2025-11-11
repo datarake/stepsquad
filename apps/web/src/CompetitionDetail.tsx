@@ -434,6 +434,7 @@ export function CompetitionDetail({ competition }: CompetitionDetailProps) {
                 status: competition.status,
               }}
               currentUserUid={user?.uid || ''}
+              isUserInAnyTeam={isUserInTeam}
               onJoinTeam={handleJoinTeam}
               onLeaveTeam={handleLeaveTeam}
               onRenameTeam={handleRenameTeam}
